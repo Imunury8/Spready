@@ -1,0 +1,22 @@
+{
+  "name": "ai-diary-service",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:web\" \"npm run dev:api\"",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "cd apps/api && .venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "prisma:generate": "npm --workspace apps/web run prisma:generate",
+    "prisma:migrate": "npm --workspace apps/web run prisma:migrate",
+    "prisma:studio": "npm --workspace apps/web run prisma:studio",
+    "build": "npm --workspace apps/web run build",
+    "lint": "npm --workspace apps/web run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

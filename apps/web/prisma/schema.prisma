@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DiaryStyle {
+  DIARY
+  REFLECTION
+  SUMMARY
+}
+
+model User {
+  id               String       @id @default(cuid())
+  email            String?      @unique
+  displayName      String?
+  preferredStyle   DiaryStyle   @default(DIARY)
+  reminderHour     Int          @default(21)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  diaryEntries     DiaryEntry[]
+  diaries          Diary[]
+}
+
+model DiaryEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String
+  source    String   @default("web")
+  url       String?
+  entryDate DateTime @default(now())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diaries   Diary[]
+
+  @@index([userId, entryDate])
+}
+
+model Diary {
+  id        String       @id @default(cuid())
+  userId    String
+  entryId   String?
+  title     String
+  mood      String
+  keywords  String[]     @default([])
+  body      String
+  style     DiaryStyle   @default(DIARY)
+  diaryDate DateTime     @default(now())
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entry     DiaryEntry?  @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, diaryDate])
+}
