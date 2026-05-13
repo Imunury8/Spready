@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export type DiaryResponse = {
   title: string;
@@ -80,4 +79,14 @@ export async function saveDiary(
 
   const data = (await response.json()) as { diary: SavedDiary };
   return data.diary;
+}
+
+export async function deleteDiary(id: string): Promise<void> {
+  const response = await fetch(`/api/diaries/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to delete diary");
+  }
 }
