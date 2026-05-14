@@ -18,6 +18,12 @@ export type SavedDiary = DiaryResponse & {
   } | null;
 };
 
+export type DiaryPayload = DiaryResponse & {
+  content: string;
+  diaryDate?: string;
+  style?: string;
+};
+
 export async function generateDiary(content: string): Promise<DiaryResponse> {
   const response = await fetch(`${API_BASE_URL}/api/diary/generate`, {
     method: "POST",
@@ -75,6 +81,50 @@ export async function saveDiary(
 
   if (!response.ok) {
     throw new Error("Failed to save diary");
+  }
+
+  const data = (await response.json()) as { diary: SavedDiary };
+  return data.diary;
+}
+
+export async function createDiary(payload: DiaryPayload): Promise<SavedDiary> {
+  const response = await fetch("/api/diaries", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source: "web",
+      style: "diary",
+      ...payload,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create diary");
+  }
+
+  const data = (await response.json()) as { diary: SavedDiary };
+  return data.diary;
+}
+
+export async function updateDiary(
+  id: string,
+  payload: DiaryPayload,
+): Promise<SavedDiary> {
+  const response = await fetch(`/api/diaries/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      style: "diary",
+      ...payload,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update diary");
   }
 
   const data = (await response.json()) as { diary: SavedDiary };

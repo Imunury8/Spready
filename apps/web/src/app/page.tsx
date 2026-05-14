@@ -1,297 +1,544 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
-  Check,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
+  Menu,
+  Pencil,
+  Plus,
   Save,
-  Send,
   Sparkles,
-  Trash2,
+  UserCircle,
+  X,
 } from "lucide-react";
+
 import {
   DiaryResponse,
   SavedDiary,
-  deleteDiary,
+  createDiary,
   generateDiary,
   listDiaries,
-  saveDiary,
+  updateDiary,
 } from "@/lib/api";
 
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+type EditorState = {
+  content: string;
+  direction: string;
+};
+
+type ReviewState = {
+  mode: "new" | "edit";
+  diaryId: string | null;
+  sourceContent: string;
+  aiDiary: DiaryResponse;
+};
+
+const EMPTY_EDITOR: EditorState = {
+  content: "",
+  direction: "",
+};
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function toDisplayDate(date: Date) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(date);
+}
+
+function getMonthDays(month: Date) {
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstDay = new Date(year, monthIndex, 1);
+  const lastDay = new Date(year, monthIndex + 1, 0);
+  const days: Array<Date | null> = [];
+
+  for (let index = 0; index < firstDay.getDay(); index += 1) {
+    days.push(null);
+  }
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    days.push(new Date(year, monthIndex, day));
+  }
+
+  return days;
+}
+
+function buildAiPrompt(editor: EditorState, selectedDate: Date) {
+  return [
+    `날짜: ${toDisplayDate(selectedDate)}`,
+    editor.direction.trim()
+      ? `사용자가 원하는 수정 방향: ${editor.direction.trim()}`
+      : "사용자가 원하는 수정 방향: 자연스럽고 진솔한 한국어 일기",
+    "원문:",
+    editor.content.trim(),
+  ].join("\n");
+}
+
 export default function Home() {
-  const [content, setContent] = useState("");
-  const [result, setResult] = useState<DiaryResponse | null>(null);
-  const [selectedDiaryId, setSelectedDiaryId] = useState<string | null>(null);
   const [diaries, setDiaries] = useState<SavedDiary[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [visibleMonth, setVisibleMonth] = useState(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  );
+  const [view, setView] = useState<"diary" | "calendar">("diary");
+  const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
+  const [review, setReview] = useState<ReviewState | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     listDiaries()
-      .then(setDiaries)
+      .then((loadedDiaries) => {
+        setDiaries(loadedDiaries);
+
+        if (loadedDiaries[0]) {
+          const latestDate = new Date(loadedDiaries[0].diaryDate);
+          setSelectedDate(latestDate);
+          setVisibleMonth(
+            new Date(latestDate.getFullYear(), latestDate.getMonth(), 1),
+          );
+        }
+      })
       .catch(() => {
-        setError("저장된 기록을 불러오지 못했습니다. DATABASE_URL과 PostgreSQL 상태를 확인해주세요.");
+        setError(
+          "저장된 기록을 불러오지 못했습니다. 서버와 데이터베이스 상태를 확인해주세요.",
+        );
       });
   }, []);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const diariesByDate = useMemo(() => {
+    return diaries.reduce<Record<string, SavedDiary[]>>((acc, diary) => {
+      const key = toDateKey(new Date(diary.diaryDate));
+      acc[key] = [...(acc[key] ?? []), diary];
+      return acc;
+    }, {});
+  }, [diaries]);
 
-    if (!content.trim()) {
+  const selectedDateKey = toDateKey(selectedDate);
+  const selectedDiaries = diariesByDate[selectedDateKey] ?? [];
+  const selectedDiary = selectedDiaries[0] ?? null;
+  const monthDays = getMonthDays(visibleMonth);
+  const monthLabel = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+  }).format(visibleMonth);
+
+  function moveMonth(direction: -1 | 1) {
+    setVisibleMonth(
+      (current) =>
+        new Date(current.getFullYear(), current.getMonth() + direction, 1),
+    );
+  }
+
+  function selectDate(date: Date) {
+    setSelectedDate(date);
+    setView("diary");
+    setEditingDiaryId(null);
+    setReview(null);
+    setEditor(EMPTY_EDITOR);
+    setError("");
+  }
+
+  function startCreate() {
+    setEditingDiaryId("new");
+    setReview(null);
+    setEditor(EMPTY_EDITOR);
+    setError("");
+  }
+
+  function startEdit(diary: SavedDiary) {
+    setEditingDiaryId(diary.id);
+    setReview(null);
+    setEditor({
+      content: diary.entry?.content || diary.diary,
+      direction: "기존 일기를 더 자연스럽고 읽기 좋게 다듬어줘.",
+    });
+    setError("");
+  }
+
+  function cancelWork() {
+    setEditingDiaryId(null);
+    setReview(null);
+    setEditor(EMPTY_EDITOR);
+    setError("");
+  }
+
+  async function generateReview() {
+    if (!editor.content.trim()) {
+      setError("AI가 다듬을 원문을 입력해주세요.");
       return;
     }
 
-    setIsLoading(true);
+    setIsGenerating(true);
     setError("");
-    setIsSaved(false);
 
     try {
-      const diary = await generateDiary(content);
-      setResult(diary);
-      setSelectedDiaryId(null);
+      const aiDiary = await generateDiary(buildAiPrompt(editor, selectedDate));
+      setReview({
+        mode: editingDiaryId === "new" ? "new" : "edit",
+        diaryId: editingDiaryId === "new" ? null : editingDiaryId,
+        sourceContent: editor.content.trim(),
+        aiDiary,
+      });
     } catch {
-      setError("일기를 생성하지 못했습니다. API 서버 상태를 확인해주세요.");
+      setError("AI가 일기를 다듬지 못했습니다. API 서버 상태를 확인해주세요.");
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
   }
 
-  async function onSave() {
-    if (!result || !content.trim()) {
+  async function confirmSave() {
+    if (!review) {
       return;
     }
 
     setIsSaving(true);
     setError("");
 
+    const payload = {
+      content: review.sourceContent,
+      title: review.aiDiary.title,
+      mood: review.aiDiary.mood,
+      keywords: review.aiDiary.keywords,
+      diary: review.aiDiary.diary,
+      diaryDate: selectedDate.toISOString(),
+      style: "diary",
+    };
+
     try {
-      const savedDiary = await saveDiary(content, result);
-      setDiaries((current) => [savedDiary, ...current]);
-      setSelectedDiaryId(savedDiary.id);
-      setIsSaved(true);
+      if (review.mode === "new") {
+        const createdDiary = await createDiary(payload);
+        setDiaries((current) => [createdDiary, ...current]);
+      } else if (review.diaryId) {
+        const updatedDiary = await updateDiary(review.diaryId, payload);
+        setDiaries((current) =>
+          current.map((diary) =>
+            diary.id === updatedDiary.id ? updatedDiary : diary,
+          ),
+        );
+      }
+
+      cancelWork();
     } catch {
-      setError("일기를 저장하지 못했습니다. PostgreSQL과 Prisma 설정을 확인해주세요.");
+      setError("검토한 일기를 저장하지 못했습니다. 서버 상태를 확인해주세요.");
     } finally {
       setIsSaving(false);
     }
   }
 
-  function selectDiary(diary: SavedDiary) {
-    setResult({
-      title: diary.title,
-      mood: diary.mood,
-      keywords: diary.keywords,
-      diary: diary.diary,
-    });
-    setContent(diary.entry?.content ?? "");
-    setSelectedDiaryId(diary.id);
-    setIsSaved(true);
-    setError("");
-  }
-
-  async function onDeleteDiary(id: string) {
-    setDeletingId(id);
-    setError("");
-
-    try {
-      await deleteDiary(id);
-      setDiaries((current) => current.filter((diary) => diary.id !== id));
-      if (selectedDiaryId === id) {
-        setResult(null);
-        setSelectedDiaryId(null);
-        setIsSaved(false);
-      }
-    } catch {
-      setError("저장된 일기를 삭제하지 못했습니다.");
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
   return (
-    <main className="min-h-screen">
-      <section className="mx-auto grid min-h-screen max-w-7xl grid-rows-[auto_1fr] gap-6 px-5 py-8 lg:px-8">
-        <header className="flex flex-col gap-4 rounded-lg border border-[var(--line)] bg-white p-5 shadow-sm md:flex-row md:items-end md:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[#fbfaf8] px-3 py-1 text-sm text-[var(--muted)]">
-              <Sparkles size={16} />
-              AI 일기 챗봇
-            </div>
-            <h1 className="text-3xl font-semibold tracking-normal text-[var(--foreground)] sm:text-3xl lg:text-4xl">
-              오늘의 감정과 생각을 일기로 정리합니다
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
-              짧은 메모, 감정, 링크를 남기면 AI가 하루의 흐름을 분석해
-              일기와 회고 초안을 만듭니다.
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
+      <section className="mx-auto flex min-h-[calc(100vh-40px)] max-w-4xl flex-col overflow-hidden rounded-lg border border-[var(--line)] bg-white shadow-sm">
+        <header className="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+          <button
+            type="button"
+            onClick={() =>
+              setView((current) => (current === "calendar" ? "diary" : "calendar"))
+            }
+            aria-label="달력 열기"
+            title="달력"
+            className="grid size-10 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[#fbfaf8]"
+          >
+            <Menu size={22} />
+          </button>
+
+          <div className="min-w-0 text-center">
+            <p className="text-xs text-[var(--muted)]">
+              {view === "calendar" ? "날짜 선택" : "일기 보기"}
             </p>
+            <h1 className="truncate text-lg font-semibold text-[var(--foreground)] sm:text-xl">
+              AI Diary
+            </h1>
           </div>
-          <span className="inline-flex w-fit items-center gap-2 rounded-md border border-[var(--line)] bg-[#fbfaf8] px-3 py-2 text-sm text-[var(--muted)]">
-            <CalendarDays size={16} />
-            매일 21:00 생성 예정
-          </span>
+
+          <button
+            type="button"
+            aria-label="회원 정보"
+            title="회원 정보"
+            className="grid size-10 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--muted)]"
+          >
+            <UserCircle size={24} />
+          </button>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <form
-            onSubmit={onSubmit}
-            className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4 shadow-sm"
-          >
-            <label
-              htmlFor="entry"
-              className="mb-3 block text-sm font-medium text-[var(--foreground)]"
-            >
-              오늘 남길 기록
-            </label>
-            <textarea
-              id="entry"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              rows={8}
-              placeholder="예: 오늘은 집중이 잘 됐다. 점심 때 본 생산성 글이 인상 깊었고, 밤에는 조금 지쳤다."
-              className="w-full resize-none rounded-md border border-[var(--line)] bg-white p-3 text-sm leading-6 outline-none transition focus:border-[var(--accent)]"
-            />
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
-                {content.trim().length.toLocaleString("ko-KR")}자
-              </span>
+        {error ? (
+          <p className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+            {error}
+          </p>
+        ) : null}
+
+        {view === "calendar" ? (
+          <div className="flex-1 p-4 sm:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <button
-                type="submit"
-                disabled={isLoading || !content.trim()}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                onClick={() => moveMonth(-1)}
+                aria-label="이전 달"
+                title="이전 달"
+                className="grid size-10 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)]"
               >
-                {isLoading ? (
-                  <Loader2 className="animate-spin" size={18} />
-                ) : (
-                  <Send size={18} />
-                )}
-                생성
+                <ChevronLeft size={20} />
+              </button>
+              <h2 className="text-xl font-semibold">{monthLabel}</h2>
+              <button
+                type="button"
+                onClick={() => moveMonth(1)}
+                aria-label="다음 달"
+                title="다음 달"
+                className="grid size-10 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)]"
+              >
+                <ChevronRight size={20} />
               </button>
             </div>
-          </form>
 
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
-        </div>
-
-        <section className="min-h-[560px] rounded-lg border border-[var(--line)] bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 border-b border-[var(--line)] pb-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm text-[var(--muted)]">오늘의 회고</p>
-              <h2 className="mt-1 text-2xl font-semibold leading-tight">
-                {result?.title ?? "아직 생성된 일기가 없습니다"}
-              </h2>
-            </div>
-            <span className="w-fit shrink-0 rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
-              {result?.mood ?? "대기"}
-            </span>
-          </div>
-
-          {result ? (
-            <div className="space-y-5">
-              <p className="whitespace-pre-wrap text-base leading-8 text-[var(--foreground)]">
-                {result.diary}
-              </p>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {result.keywords.map((keyword) => (
-                    <span
-                      key={keyword}
-                      className="rounded-full border border-[var(--line)] px-3 py-1 text-sm text-[var(--muted)]"
-                    >
-                      #{keyword}
-                    </span>
-                  ))}
+            <div className="grid grid-cols-7 border-y border-[var(--line)] text-center text-xs font-medium text-[var(--muted)]">
+              {WEEKDAYS.map((weekday) => (
+                <div key={weekday} className="py-3">
+                  {weekday}
                 </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 pt-3 sm:gap-2">
+              {monthDays.map((date, index) => {
+                if (!date) {
+                  return <div key={`blank-${index}`} className="aspect-square" />;
+                }
+
+                const key = toDateKey(date);
+                const hasDiary = Boolean(diariesByDate[key]?.length);
+                const isSelected = key === selectedDateKey;
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => selectDate(date)}
+                    className={[
+                      "relative aspect-square rounded-md border text-sm transition",
+                      isSelected
+                        ? "border-[var(--accent)] bg-teal-50 text-teal-900"
+                        : "border-[var(--line)] bg-[#fbfaf8] text-[var(--foreground)] hover:border-[var(--accent)] hover:bg-white",
+                    ].join(" ")}
+                  >
+                    <span className="absolute left-2 top-2">{date.getDate()}</span>
+                    {hasDiary ? (
+                      <span className="absolute bottom-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : review ? (
+          <article className="flex flex-1 flex-col p-5 sm:p-7">
+            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
+                  <Sparkles size={16} />
+                  AI가 다듬은 일기를 검토하세요
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
+                  {review.aiDiary.title}
+                </h2>
+              </div>
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={onSave}
-                  disabled={isSaving || isSaved}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-4 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => setReview(null)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                >
+                  <Pencil size={16} />
+                  다시 수정
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmSave}
+                  disabled={isSaving}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? (
-                    <Loader2 className="animate-spin" size={18} />
-                  ) : isSaved ? (
-                    <Check size={18} />
+                    <Loader2 className="animate-spin" size={16} />
                   ) : (
-                    <Save size={18} />
+                    <Save size={16} />
                   )}
-                  {isSaved ? "저장됨" : "저장"}
+                  DB 저장
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="grid min-h-80 place-items-center rounded-md border border-dashed border-[var(--line)] bg-[#fbfaf8] p-6 text-center text-[var(--muted)]">
-              왼쪽 입력창에 오늘의 기록을 남기고 생성 버튼을 눌러보세요.
-            </div>
-          )}
-        </section>
 
-        <aside className="rounded-lg border border-[var(--line)] bg-white p-4 shadow-sm lg:col-span-2 xl:col-span-1">
-          <div className="mb-4">
-            <p className="text-sm text-[var(--muted)]">아카이브</p>
-            <h2 className="mt-1 text-xl font-semibold">최근 기록</h2>
-          </div>
-          {diaries.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              {diaries.map((diary) => (
-                <article
-                  key={diary.id}
-                  className="rounded-md border border-[var(--line)] bg-[#fbfaf8] p-3 transition hover:border-[var(--accent)] hover:bg-white"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => selectDiary(diary)}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <span className="block truncate text-sm font-medium text-[var(--foreground)]">
-                        {diary.title}
-                      </span>
-                      <span className="mt-1 block text-xs text-[var(--muted)]">
-                        {new Date(diary.createdAt).toLocaleDateString("ko-KR", {
-                          month: "2-digit",
-                          day: "2-digit",
-                        })}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteDiary(diary.id)}
-                      disabled={deletingId === diary.id}
-                      aria-label={`${diary.title} 삭제`}
-                      title="삭제"
-                      className="grid size-8 shrink-0 place-items-center rounded-md border border-transparent text-[var(--muted)] transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {deletingId === diary.id ? (
-                        <Loader2 className="animate-spin" size={16} />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => selectDiary(diary)}
-                    className="mt-2 block w-full text-left"
+            <div className="space-y-5">
+              <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
+                {review.aiDiary.mood}
+              </span>
+              <p className="whitespace-pre-wrap text-base leading-8 text-[var(--foreground)]">
+                {review.aiDiary.diary}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {review.aiDiary.keywords.map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="rounded-full border border-[var(--line)] px-3 py-1 text-sm text-[var(--muted)]"
                   >
-                    <span className="line-clamp-3 text-sm leading-5 text-[var(--muted)]">
-                    {diary.diary}
+                    #{keyword}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </article>
+        ) : editingDiaryId ? (
+          <article className="flex flex-1 flex-col p-5 sm:p-7">
+            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
+                  <CalendarDays size={16} />
+                  {toDisplayDate(selectedDate)}
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
+                  {editingDiaryId === "new" ? "일기 작성" : "일기 수정"}
+                </h2>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={cancelWork}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                >
+                  <X size={16} />
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={generateReview}
+                  disabled={isGenerating}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Sparkles size={16} />
+                  )}
+                  AI 다듬기
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <label className="grid gap-2 text-sm font-medium text-[var(--foreground)]">
+                원하는 방향
+                <input
+                  value={editor.direction}
+                  onChange={(event) =>
+                    setEditor((current) => ({
+                      ...current,
+                      direction: event.target.value,
+                    }))
+                  }
+                  placeholder="예: 담백하게, 감성적으로, 짧게 요약해서"
+                  className="min-h-11 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none transition focus:border-[var(--accent)]"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-[var(--foreground)]">
+                원문
+                <textarea
+                  value={editor.content}
+                  onChange={(event) =>
+                    setEditor((current) => ({
+                      ...current,
+                      content: event.target.value,
+                    }))
+                  }
+                  rows={12}
+                  placeholder="오늘 있었던 일이나 수정하고 싶은 일기를 적어주세요."
+                  className="resize-none rounded-md border border-[var(--line)] bg-white p-3 text-sm leading-7 outline-none transition focus:border-[var(--accent)]"
+                />
+              </label>
+            </div>
+          </article>
+        ) : (
+          <article className="flex flex-1 flex-col p-5 sm:p-7">
+            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
+                  <CalendarDays size={16} />
+                  {toDisplayDate(selectedDate)}
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
+                  {selectedDiary?.title ?? "저장된 일기가 없습니다"}
+                </h2>
+              </div>
+              {selectedDiary ? (
+                <button
+                  type="button"
+                  onClick={() => startEdit(selectedDiary)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                >
+                  <Pencil size={16} />
+                  수정
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800"
+                >
+                  <Plus size={16} />
+                  작성
+                </button>
+              )}
+            </div>
+
+            {selectedDiaries.length ? (
+              <div className="space-y-8">
+                {selectedDiaries.map((diary) => (
+                  <section key={diary.id} className="space-y-5">
+                    {selectedDiaries.length > 1 ? (
+                      <h3 className="text-lg font-semibold">{diary.title}</h3>
+                    ) : null}
+                    <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
+                      {diary.mood}
                     </span>
-                  </button>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed border-[var(--line)] bg-[#fbfaf8] p-4 text-sm leading-6 text-[var(--muted)]">
-              저장된 일기가 없습니다. 생성한 일기를 저장하면 이곳에 표시됩니다.
-            </div>
-          )}
-        </aside>
-        </div>
+                    <p className="whitespace-pre-wrap text-base leading-8 text-[var(--foreground)]">
+                      {diary.diary}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {diary.keywords.map((keyword) => (
+                        <span
+                          key={`${diary.id}-${keyword}`}
+                          className="rounded-full border border-[var(--line)] px-3 py-1 text-sm text-[var(--muted)]"
+                        >
+                          #{keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="grid flex-1 place-items-center rounded-md border border-dashed border-[var(--line)] bg-[#fbfaf8] p-6 text-center text-[var(--muted)]">
+                작성 버튼을 눌러 AI가 다듬을 원문을 입력하세요.
+              </div>
+            )}
+          </article>
+        )}
       </section>
     </main>
   );

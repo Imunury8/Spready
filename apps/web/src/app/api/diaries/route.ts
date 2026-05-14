@@ -12,6 +12,7 @@ type CreateDiaryBody = {
   keywords?: string[];
   diary?: string;
   style?: string;
+  diaryDate?: string;
 };
 
 function toDiaryStyle(style: string | undefined): DiaryStyle {
@@ -72,12 +73,22 @@ export async function POST(request: Request) {
   }
 
   const user = await getDemoUser();
+  const diaryDate = body.diaryDate ? new Date(body.diaryDate) : new Date();
+
+  if (Number.isNaN(diaryDate.getTime())) {
+    return NextResponse.json(
+      { message: "diaryDate must be a valid date" },
+      { status: 400 },
+    );
+  }
+
   const diary = await prisma.$transaction(async (tx) => {
     const entry = await tx.diaryEntry.create({
       data: {
         userId: user.id,
         content: body.content!.trim(),
         source: body.source?.trim() || "web",
+        entryDate: diaryDate,
       },
     });
 
@@ -90,6 +101,7 @@ export async function POST(request: Request) {
         keywords: body.keywords?.filter(Boolean).slice(0, 8) ?? [],
         body: body.diary!.trim(),
         style: toDiaryStyle(body.style),
+        diaryDate,
       },
       include: { entry: { select: { content: true, source: true } } },
     });
