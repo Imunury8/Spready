@@ -5,12 +5,13 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Loader2,
-  Menu,
   Pencil,
   Plus,
   Save,
   Sparkles,
+  Trash2,
   UserCircle,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
   DiaryResponse,
   SavedDiary,
   createDiary,
+  deleteDiary,
   generateDiary,
   listDiaries,
   updateDiary,
@@ -95,12 +97,14 @@ export default function Home() {
   const [visibleMonth, setVisibleMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
-  const [view, setView] = useState<"diary" | "calendar">("diary");
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [review, setReview] = useState<ReviewState | null>(null);
+  const [generationTime, setGenerationTime] = useState("21:00");
+  const [generationOpen, setGenerationOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingDiaryId, setDeletingDiaryId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -149,7 +153,6 @@ export default function Home() {
 
   function selectDate(date: Date) {
     setSelectedDate(date);
-    setView("diary");
     setEditingDiaryId(null);
     setReview(null);
     setEditor(EMPTY_EDITOR);
@@ -243,83 +246,75 @@ export default function Home() {
     }
   }
 
-  return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <section className="mx-auto flex min-h-[calc(100vh-40px)] max-w-4xl flex-col overflow-hidden rounded-lg border border-[var(--line)] bg-white shadow-sm">
-        <header className="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3 sm:px-5">
-          <button
-            type="button"
-            onClick={() =>
-              setView((current) => (current === "calendar" ? "diary" : "calendar"))
-            }
-            aria-label="달력 열기"
-            title="달력"
-            className="grid size-10 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[#fbfaf8]"
-          >
-            <Menu size={22} />
-          </button>
+  async function removeDiary(diary: SavedDiary) {
+    setDeletingDiaryId(diary.id);
+    setError("");
 
-          <div className="min-w-0 text-center">
-            <p className="text-xs text-[var(--muted)]">
-              {view === "calendar" ? "날짜 선택" : "일기 보기"}
-            </p>
-            <h1 className="truncate text-lg font-semibold text-[var(--foreground)] sm:text-xl">
-              AI Diary
-            </h1>
+    try {
+      await deleteDiary(diary.id);
+      setDiaries((current) =>
+        current.filter((currentDiary) => currentDiary.id !== diary.id),
+      );
+
+      if (editingDiaryId === diary.id) {
+        cancelWork();
+      }
+    } catch {
+      setError("일기를 삭제하지 못했습니다. 서버 상태를 확인해주세요.");
+    } finally {
+      setDeletingDiaryId(null);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+      <div className="mx-auto grid min-h-[calc(100vh-32px)] max-w-7xl items-stretch gap-6 lg:min-h-[calc(100vh-48px)] lg:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)]">
+        <aside className="flex min-w-0 flex-col gap-5">
+          <div className="px-1 sm:px-2">
+            <div className="mb-2 flex items-center gap-3">
+              <div className="flex size-11 items-center justify-center rounded-2xl bg-slate-900 font-bold text-white">
+                S
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">Spready</h1>
+                <p className="text-xs text-slate-400">
+                  흩어진 하루를 하나의 일기로
+                </p>
+              </div>
+            </div>
           </div>
 
-          <button
-            type="button"
-            aria-label="회원 정보"
-            title="회원 정보"
-            className="grid size-10 shrink-0 place-items-center rounded-md border border-[var(--line)] text-[var(--muted)]"
-          >
-            <UserCircle size={24} />
-          </button>
-        </header>
-
-        {error ? (
-          <p className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        {view === "calendar" ? (
-          <div className="flex-1 p-4 sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-5 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => moveMonth(-1)}
                 aria-label="이전 달"
-                title="이전 달"
-                className="grid size-10 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                className="grid size-9 place-items-center rounded-xl text-slate-700 hover:bg-slate-100"
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={19} />
               </button>
-              <h2 className="text-xl font-semibold">{monthLabel}</h2>
+              <h2 className="font-bold text-slate-900">{monthLabel}</h2>
               <button
                 type="button"
                 onClick={() => moveMonth(1)}
                 aria-label="다음 달"
-                title="다음 달"
-                className="grid size-10 place-items-center rounded-md border border-[var(--line)] text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                className="grid size-9 place-items-center rounded-xl text-slate-700 hover:bg-slate-100"
               >
-                <ChevronRight size={20} />
+                <ChevronRight size={19} />
               </button>
             </div>
 
-            <div className="grid grid-cols-7 border-y border-[var(--line)] text-center text-xs font-medium text-[var(--muted)]">
+            <div className="mb-2 grid grid-cols-7 text-center text-xs text-slate-400">
               {WEEKDAYS.map((weekday) => (
-                <div key={weekday} className="py-3">
-                  {weekday}
-                </div>
+                <div key={weekday}>{weekday}</div>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1 pt-3 sm:gap-2">
+            <div className="grid grid-cols-7 gap-1">
               {monthDays.map((date, index) => {
                 if (!date) {
-                  return <div key={`blank-${index}`} className="aspect-square" />;
+                  return <div key={`blank-${index}`} className="h-10" />;
                 }
 
                 const key = toDateKey(date);
@@ -331,118 +326,204 @@ export default function Home() {
                     key={key}
                     type="button"
                     onClick={() => selectDate(date)}
+                    aria-label={`${date.getDate()}일 ${
+                      hasDiary ? "저장된 일기 있음" : "저장된 일기 없음"
+                    }`}
                     className={[
-                      "relative aspect-square rounded-md border text-sm transition",
+                      "relative h-10 rounded-xl text-sm transition",
                       isSelected
-                        ? "border-[var(--accent)] bg-teal-50 text-teal-900"
-                        : "border-[var(--line)] bg-[#fbfaf8] text-[var(--foreground)] hover:border-[var(--accent)] hover:bg-white",
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-700 hover:bg-slate-100",
                     ].join(" ")}
                   >
-                    <span className="absolute left-2 top-2">{date.getDate()}</span>
+                    {date.getDate()}
                     {hasDiary ? (
-                      <span className="absolute bottom-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" />
+                      <span
+                        className={[
+                          "absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full",
+                          isSelected ? "bg-white" : "bg-slate-900",
+                        ].join(" ")}
+                      />
                     ) : null}
                   </button>
                 );
               })}
             </div>
-          </div>
-        ) : review ? (
-          <article className="flex flex-1 flex-col p-5 sm:p-7">
-            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <Sparkles size={16} />
-                  AI가 다듬은 일기를 검토하세요
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
-                  {review.aiDiary.title}
-                </h2>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReview(null)}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
-                >
-                  <Pencil size={16} />
-                  다시 수정
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmSave}
-                  disabled={isSaving}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Save size={16} />
-                  )}
-                  DB 저장
-                </button>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="grid size-10 place-items-center rounded-full bg-slate-100 text-slate-500">
+                  <UserCircle size={24} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">하루기록러</p>
+                  <p className="text-xs text-slate-400">@daily_memo</p>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-5">
-              <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
-                {review.aiDiary.mood}
-              </span>
-              <p className="whitespace-pre-wrap text-base leading-8 text-[var(--foreground)]">
-                {review.aiDiary.diary}
+            <div className="mb-3 rounded-2xl bg-slate-50 p-3">
+              <p className="mb-2 text-xs font-semibold text-slate-400">
+                생성 시간
               </p>
-              <div className="flex flex-wrap gap-2">
-                {review.aiDiary.keywords.map((keyword) => (
-                  <span
-                    key={keyword}
-                    className="rounded-full border border-[var(--line)] px-3 py-1 text-sm text-[var(--muted)]"
-                  >
-                    #{keyword}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </article>
-        ) : editingDiaryId ? (
-          <article className="flex flex-1 flex-col p-5 sm:p-7">
-            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <CalendarDays size={16} />
-                  {toDisplayDate(selectedDate)}
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
-                  {editingDiaryId === "new" ? "일기 작성" : "일기 수정"}
-                </h2>
-              </div>
-              <div className="flex gap-2">
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={cancelWork}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
+                  onClick={() => setGenerationOpen((current) => !current)}
+                  className="flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-800"
+                  aria-label="생성 시간 선택"
                 >
-                  <X size={16} />
-                  취소
+                  <span>{generationTime}</span>
+                  <Clock size={15} />
                 </button>
-                <button
-                  type="button"
-                  onClick={generateReview}
-                  disabled={isGenerating}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Sparkles size={16} />
-                  )}
-                  AI 다듬기
-                </button>
+
+                {generationOpen ? (
+                  <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-lg border border-slate-300 bg-white shadow-lg">
+                    {["21:00", "22:00", "23:00", "00:00"].map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => {
+                          setGenerationTime(time);
+                          setGenerationOpen(false);
+                        }}
+                        className={[
+                          "flex h-10 w-full items-center px-4 text-left text-sm hover:bg-slate-50",
+                          generationTime === time
+                            ? "font-semibold text-slate-900"
+                            : "text-slate-500",
+                        ].join(" ")}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            <div className="grid gap-4">
-              <label className="grid gap-2 text-sm font-medium text-[var(--foreground)]">
-                원하는 방향
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-400">저장된 일기</p>
+                <span className="text-xs text-slate-400">{diaries.length}개</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-slate-900"
+                  style={{ width: `${Math.min(diaries.length * 10, 100)}%` }}
+                />
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <main className="grid min-w-0 auto-rows-max gap-5 lg:pt-[58px]">
+          {error ? (
+            <p className="rounded-3xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
+
+          {review ? (
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400">
+                    AI REVIEW
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                    {review.aiDiary.title}
+                  </h2>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReview(null)}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil size={16} />
+                    다시 수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmSave}
+                    disabled={isSaving}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Save size={16} />
+                    )}
+                    DB 저장
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <span className="inline-flex h-8 items-center rounded-full bg-slate-100 px-3 text-xs text-slate-600">
+                  {review.aiDiary.mood}
+                </span>
+                <div className="rounded-2xl bg-slate-50 p-4 text-base leading-8 text-slate-700">
+                  <p className="whitespace-pre-wrap">{review.aiDiary.diary}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {review.aiDiary.keywords.map((keyword) => (
+                    <span
+                      key={keyword}
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs text-slate-600"
+                    >
+                      #{keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : editingDiaryId ? (
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400">
+                    TODAY MEMO
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                    {editingDiaryId === "new" ? "오늘 메모" : "일기 수정"}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {toDisplayDate(selectedDate)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelWork}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <X size={16} />
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={generateReview}
+                    disabled={isGenerating}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Sparkles size={16} />
+                    )}
+                    AI 다듬기
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  원하는 방향
+                </label>
                 <input
                   value={editor.direction}
                   onChange={(event) =>
@@ -452,12 +533,11 @@ export default function Home() {
                     }))
                   }
                   placeholder="예: 담백하게, 감성적으로, 짧게 요약해서"
-                  className="min-h-11 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none transition focus:border-[var(--accent)]"
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-slate-900"
                 />
-              </label>
+              </div>
 
-              <label className="grid gap-2 text-sm font-medium text-[var(--foreground)]">
-                원문
+              <div className="flex h-[520px] flex-col rounded-3xl border border-slate-200 bg-slate-50 p-5 transition-all duration-300">
                 <textarea
                   value={editor.content}
                   onChange={(event) =>
@@ -466,80 +546,119 @@ export default function Home() {
                       content: event.target.value,
                     }))
                   }
-                  rows={12}
                   placeholder="오늘 있었던 일이나 수정하고 싶은 일기를 적어주세요."
-                  className="resize-none rounded-md border border-[var(--line)] bg-white p-3 text-sm leading-7 outline-none transition focus:border-[var(--accent)]"
+                  className="flex-1 resize-none bg-transparent text-lg leading-8 text-slate-800 outline-none"
+                  maxLength={1200}
                 />
-              </label>
-            </div>
-          </article>
-        ) : (
-          <article className="flex flex-1 flex-col p-5 sm:p-7">
-            <div className="mb-6 flex flex-col gap-3 border-b border-[var(--line)] pb-5 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <p className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <CalendarDays size={16} />
-                  {toDisplayDate(selectedDate)}
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold leading-tight text-[var(--foreground)] sm:text-3xl">
-                  {selectedDiary?.title ?? "저장된 일기가 없습니다"}
-                </h2>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+                  <span className="text-sm text-slate-400">
+                    {editor.content.length.toLocaleString("ko-KR")}/1200
+                  </span>
+                  <span className="text-sm text-slate-400">
+                    AI 검토 후 저장
+                  </span>
+                </div>
               </div>
-              {selectedDiary ? (
-                <button
-                  type="button"
-                  onClick={() => startEdit(selectedDiary)}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)]"
-                >
-                  <Pencil size={16} />
-                  수정
-                </button>
-              ) : (
+            </section>
+          ) : selectedDiary ? (
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-xs text-slate-400">
+                    {toDisplayDate(selectedDate)}
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                    저장된 일기
+                  </h2>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(selectedDiary)}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil size={16} />
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeDiary(selectedDiary)}
+                    disabled={deletingDiaryId === selectedDiary.id}
+                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-red-100 bg-white px-4 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {deletingDiaryId === selectedDiary.id ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
+                    삭제
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <h3 className="text-lg font-bold text-slate-900">
+                  {selectedDiary.title}
+                </h3>
+                <span className="flex h-8 shrink-0 items-center rounded-full bg-slate-100 px-3 text-xs text-slate-600">
+                  {selectedDiary.mood}
+                </span>
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                <p className="whitespace-pre-wrap">{selectedDiary.diary}</p>
+              </div>
+
+              <div className="mt-5">
+                <h4 className="mb-2 text-sm font-semibold text-slate-900">
+                  주요 키워드
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedDiary.keywords.map((keyword) => (
+                    <span
+                      key={`${selectedDiary.id}-${keyword}`}
+                      className="rounded-full border border-slate-200 px-3 py-2 text-xs text-slate-600"
+                    >
+                      #{keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {selectedDiary.entry?.content ? (
+                <div className="mt-5">
+                  <h4 className="mb-2 text-sm font-semibold text-slate-900">
+                    내가 보낸 기록
+                  </h4>
+                  <div className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                    {selectedDiary.entry.content}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : (
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+              <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                <CalendarDays className="mb-4 text-slate-300" size={34} />
+                <p className="mb-2 text-sm font-semibold text-slate-700">
+                  작성된 일기가 없습니다
+                </p>
+                <p className="mb-5 text-xs leading-5 text-slate-400">
+                  {toDisplayDate(selectedDate)}에는 저장된 일기가 없어요.
+                </p>
                 <button
                   type="button"
                   onClick={startCreate}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-foreground)] transition hover:bg-teal-800"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm text-white"
                 >
                   <Plus size={16} />
-                  작성
+                  새로 쓰기
                 </button>
-              )}
-            </div>
-
-            {selectedDiaries.length ? (
-              <div className="space-y-8">
-                {selectedDiaries.map((diary) => (
-                  <section key={diary.id} className="space-y-5">
-                    {selectedDiaries.length > 1 ? (
-                      <h3 className="text-lg font-semibold">{diary.title}</h3>
-                    ) : null}
-                    <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
-                      {diary.mood}
-                    </span>
-                    <p className="whitespace-pre-wrap text-base leading-8 text-[var(--foreground)]">
-                      {diary.diary}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {diary.keywords.map((keyword) => (
-                        <span
-                          key={`${diary.id}-${keyword}`}
-                          className="rounded-full border border-[var(--line)] px-3 py-1 text-sm text-[var(--muted)]"
-                        >
-                          #{keyword}
-                        </span>
-                      ))}
-                    </div>
-                  </section>
-                ))}
               </div>
-            ) : (
-              <div className="grid flex-1 place-items-center rounded-md border border-dashed border-[var(--line)] bg-[#fbfaf8] p-6 text-center text-[var(--muted)]">
-                작성 버튼을 눌러 AI가 다듬을 원문을 입력하세요.
-              </div>
-            )}
-          </article>
-        )}
-      </section>
-    </main>
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }

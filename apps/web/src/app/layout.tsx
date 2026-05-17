@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Diary",
-  description: "AI diary chatbot service",
+  title: "Spready",
+  description: "AI diary service",
 };
 
 export default function RootLayout({
