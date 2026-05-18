@@ -36,3 +36,19 @@ Prisma Studio:
 ```powershell
 npm run prisma:studio
 ```
+
+## Google Login
+
+Set these values in `.env` and `apps/web/.env`:
+
+```env
+AUTH_SECRET=replace-with-random-secret
+AUTH_GOOGLE_ID=replace-with-google-client-id
+AUTH_GOOGLE_SECRET=replace-with-google-client-secret
+```
+
+Google OAuth authorized redirect URI for local development:
+
+```txt
+http://localhost:3000/api/auth/callback/google
+```

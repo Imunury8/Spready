@@ -27,3 +27,16 @@ textarea,
 input {
   font: inherit;
 }
+
+button,
+[role="button"],
+select,
+summary,
+a {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

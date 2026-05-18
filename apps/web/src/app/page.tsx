@@ -12,7 +12,6 @@ import {
   Save,
   Sparkles,
   Trash2,
-  UserCircle,
   X,
 } from "lucide-react";
 
@@ -25,6 +24,7 @@ import {
   listDiaries,
   updateDiary,
 } from "@/lib/api";
+import { ProfileCard } from "@/app/components/profile-card";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -352,17 +352,7 @@ export default function Home() {
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="grid size-10 place-items-center rounded-full bg-slate-100 text-slate-500">
-                  <UserCircle size={24} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">하루기록러</p>
-                  <p className="text-xs text-slate-400">@daily_memo</p>
-                </div>
-              </div>
-            </div>
+            <ProfileCard />
 
             <div className="mb-3 rounded-2xl bg-slate-50 p-3">
               <p className="mb-2 text-xs font-semibold text-slate-400">
