@@ -67,6 +67,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
+  if (
+    (body.content?.trim().length ?? 0) > 500 ||
+    body.diary.trim().length > 500
+  ) {
+    return NextResponse.json(
+      { message: "content and diary must be 500 characters or less" },
+      { status: 400 },
+    );
+  }
+
   const user = await getDemoUser();
   const existingDiary = await prisma.diary.findFirst({
     where: {

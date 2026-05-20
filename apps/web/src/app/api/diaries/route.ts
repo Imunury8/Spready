@@ -50,6 +50,13 @@ function toClientDiary(diary: {
   };
 }
 
+function getDayRange(date: Date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+
+  return { start, end };
+}
+
 export async function GET() {
   const user = await getDemoUser();
   const diaries = await prisma.diary.findMany({
@@ -72,6 +79,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (body.content.trim().length > 500 || body.diary.trim().length > 500) {
+    return NextResponse.json(
+      { message: "content and diary must be 500 characters or less" },
+      { status: 400 },
+    );
+  }
+
   const user = await getDemoUser();
   const diaryDate = body.diaryDate ? new Date(body.diaryDate) : new Date();
 
@@ -79,6 +93,25 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { message: "diaryDate must be a valid date" },
       { status: 400 },
+    );
+  }
+
+  const { start, end } = getDayRange(diaryDate);
+  const existingDiary = await prisma.diary.findFirst({
+    where: {
+      userId: user.id,
+      diaryDate: {
+        gte: start,
+        lt: end,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (existingDiary) {
+    return NextResponse.json(
+      { message: "Only one diary can be saved per day" },
+      { status: 409 },
     );
   }
 

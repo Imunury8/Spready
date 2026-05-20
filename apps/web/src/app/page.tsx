@@ -45,6 +45,8 @@ const EMPTY_EDITOR: EditorState = {
   direction: "",
 };
 
+const MAX_DIARY_LENGTH = 500;
+
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -60,6 +62,15 @@ function toDisplayDate(date: Date) {
     day: "numeric",
     weekday: "long",
   }).format(date);
+}
+
+function toDiaryDateISOString(date: Date) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    12,
+  ).toISOString();
 }
 
 function getMonthDays(month: Date) {
@@ -86,6 +97,7 @@ function buildAiPrompt(editor: EditorState, selectedDate: Date) {
     editor.direction.trim()
       ? `사용자가 원하는 수정 방향: ${editor.direction.trim()}`
       : "사용자가 원하는 수정 방향: 자연스럽고 진솔한 한국어 일기",
+    "최종 일기 본문은 반드시 500자 이하로 작성해줘.",
     "원문:",
     editor.content.trim(),
   ].join("\n");
@@ -189,6 +201,11 @@ export default function Home() {
       return;
     }
 
+    if (editor.content.trim().length > MAX_DIARY_LENGTH) {
+      setError("일기는 500자 이하로 입력해주세요.");
+      return;
+    }
+
     setIsGenerating(true);
     setError("");
 
@@ -221,11 +238,16 @@ export default function Home() {
       mood: review.aiDiary.mood,
       keywords: review.aiDiary.keywords,
       diary: review.aiDiary.diary,
-      diaryDate: selectedDate.toISOString(),
+      diaryDate: toDiaryDateISOString(selectedDate),
       style: "diary",
     };
 
     try {
+      if (payload.diary.length > MAX_DIARY_LENGTH) {
+        setError("AI가 만든 일기가 500자를 넘었습니다. 다시 수정해주세요.");
+        return;
+      }
+
       if (review.mode === "new") {
         const createdDiary = await createDiary(payload);
         setDiaries((current) => [createdDiary, ...current]);
@@ -538,11 +560,12 @@ export default function Home() {
                   }
                   placeholder="오늘 있었던 일이나 수정하고 싶은 일기를 적어주세요."
                   className="flex-1 resize-none bg-transparent text-lg leading-8 text-slate-800 outline-none"
-                  maxLength={1200}
+                  maxLength={MAX_DIARY_LENGTH}
                 />
                 <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                   <span className="text-sm text-slate-400">
-                    {editor.content.length.toLocaleString("ko-KR")}/1200
+                    {editor.content.length.toLocaleString("ko-KR")}/
+                    {MAX_DIARY_LENGTH}
                   </span>
                   <span className="text-sm text-slate-400">
                     AI 검토 후 저장
