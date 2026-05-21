@@ -21,6 +21,7 @@ model User {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   diaryEntries     DiaryEntry[]
+  diaryEntryHistory DiaryEntryHistory[]
   diaries          Diary[]
 }
 
@@ -34,8 +35,23 @@ model DiaryEntry {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   diaries   Diary[]
+  histories DiaryEntryHistory[]
 
   @@index([userId, entryDate])
+}
+
+model DiaryEntryHistory {
+  id              String     @id @default(cuid())
+  entryId         String
+  userId          String
+  previousContent String
+  nextContent     String
+  createdAt       DateTime   @default(now())
+  entry           DiaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Diary {

@@ -35,7 +35,17 @@ function toClientDiary(diary: {
   style: DiaryStyle;
   diaryDate: Date;
   createdAt: Date;
-  entry: { content: string; source: string } | null;
+  entry: {
+    id: string;
+    content: string;
+    source: string;
+    histories: Array<{
+      id: string;
+      previousContent: string;
+      nextContent: string;
+      createdAt: Date;
+    }>;
+  } | null;
 }) {
   return {
     id: diary.id,
@@ -46,7 +56,15 @@ function toClientDiary(diary: {
     style: diary.style.toLowerCase(),
     diaryDate: diary.diaryDate.toISOString(),
     createdAt: diary.createdAt.toISOString(),
-    entry: diary.entry,
+    entry: diary.entry
+      ? {
+          ...diary.entry,
+          histories: diary.entry.histories.map((history) => ({
+            ...history,
+            createdAt: history.createdAt.toISOString(),
+          })),
+        }
+      : null,
   };
 }
 
@@ -64,7 +82,25 @@ export async function GET() {
   }
   const diaries = await prisma.diary.findMany({
     where: { userId: user.id },
-    include: { entry: { select: { content: true, source: true } } },
+    include: {
+      entry: {
+        select: {
+          id: true,
+          content: true,
+          source: true,
+          histories: {
+            select: {
+              id: true,
+              previousContent: true,
+              nextContent: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          },
+        },
+      },
+    },
     orderBy: { createdAt: "desc" },
     take: 20,
   });
@@ -156,7 +192,25 @@ export async function POST(request: Request) {
         style: toDiaryStyle(body.style),
         diaryDate,
       },
-      include: { entry: { select: { content: true, source: true } } },
+      include: {
+        entry: {
+          select: {
+            id: true,
+            content: true,
+            source: true,
+            histories: {
+              select: {
+                id: true,
+                previousContent: true,
+                nextContent: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: "desc" },
+              take: 5,
+            },
+          },
+        },
+      },
     });
   });
 

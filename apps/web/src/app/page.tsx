@@ -10,7 +10,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  Save,
   Sparkles,
   Trash2,
   X,
@@ -114,7 +113,10 @@ export default function Home() {
   const { data: session, status: sessionStatus } = useSession();
 
   // Core Theme State
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return (localStorage.getItem("theme") as "light" | "dark" | null) || "light";
+  });
 
   const [diaries, setDiaries] = useState<SavedDiary[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -131,6 +133,10 @@ export default function Home() {
   const [editedDiaryText, setEditedDiaryText] = useState("");
   const [isUpdatingDiary, setIsUpdatingDiary] = useState(false);
 
+  // Saved memo editing text state
+  const [editedMemoText, setEditedMemoText] = useState("");
+  const [isUpdatingMemo, setIsUpdatingMemo] = useState(false);
+
   // Preference states
   const [generationTime, setGenerationTime] = useState("21:00");
   const [generationOpen, setGenerationOpen] = useState(false);
@@ -144,15 +150,12 @@ export default function Home() {
 
   // Initialize Theme on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const initialTheme = savedTheme || "light";
-    setTheme(initialTheme);
-    if (initialTheme === "dark") {
+    if (theme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, []);
+  }, [theme]);
 
   function toggleTheme() {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -168,6 +171,7 @@ export default function Home() {
   // Load diaries and preferences on login
   useEffect(() => {
     if (!isLoggedIn) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDiaries([]);
       return;
     }
@@ -206,12 +210,6 @@ export default function Home() {
   const selectedDiary = selectedDiaries[0] ?? null;
   const monthDays = getMonthDays(visibleMonth);
 
-  // Today's Memo character calculations
-  const previousContentLength = selectedDiary?.entry?.content?.trim().length ?? 0;
-  const extraChar = previousContentLength > 0 ? 1 : 0; // separating newline
-  const maxMemoInputLength = Math.max(0, MAX_DIARY_LENGTH - previousContentLength - extraChar);
-  const currentTotalLength = previousContentLength + extraChar + memoContent.length;
-
   const monthLabel = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "long",
@@ -220,15 +218,19 @@ export default function Home() {
   // Initialize edited diary text when selectedDiary changes
   useEffect(() => {
     if (selectedDiary) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedDiaryText(selectedDiary.diary);
+      setEditedMemoText(selectedDiary.entry?.content || "");
     } else {
       setEditedDiaryText("");
+      setEditedMemoText("");
     }
   }, [selectedDiary]);
 
   // Lock the time when expanding Today's Memo
   useEffect(() => {
     if (isMemoExpanded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMemoTime(formatMemoTime(new Date()));
     }
   }, [isMemoExpanded]);
@@ -262,7 +264,7 @@ export default function Home() {
     }
   }
 
-  // Today's Memo submission logic
+  // Diary creation flow for a selected date without an existing diary
   async function handleSendMemo() {
     if (!isLoggedIn) {
       setError("일기를 저장하려면 로그인이 필요합니다.");
@@ -272,22 +274,18 @@ export default function Home() {
     const trimmedContent = memoContent.trim();
     if (!trimmedContent) return;
 
-    // Determine if we are updating (fusing) or creating a new diary
-    const isUpdateFlow = !!selectedDiary;
+    if (selectedDiary) {
+      setError("이미 저장된 일기는 아래 기록 수정 기능을 사용해주세요.");
+      return;
+    }
 
-    if (!isUpdateFlow && isLimitExceeded) {
+    if (isLimitExceeded) {
       setError("사용 한도를 초과했습니다. 새로운 일기를 작성할 수 없습니다.");
       return;
     }
 
-    // Determine merged content and length
-    const previousContent = selectedDiary?.entry?.content || "";
-    const mergedContent = previousContent.trim()
-      ? `${previousContent.trim()}\n${trimmedContent}`
-      : trimmedContent;
-
-    if (mergedContent.length > MAX_DIARY_LENGTH) {
-      setError(`전체 메모의 길이는 ${MAX_DIARY_LENGTH}자 이하로 제한됩니다.`);
+    if (trimmedContent.length > MAX_DIARY_LENGTH) {
+      setError(`기록의 길이는 ${MAX_DIARY_LENGTH}자 이하로 제한됩니다.`);
       return;
     }
 
@@ -296,48 +294,27 @@ export default function Home() {
 
     try {
       // 1. Generate diary reflection with FastAPI via Next.js api proxy
-      const generated = await generateDiary(mergedContent);
+      const generated = await generateDiary(trimmedContent);
       const slicedDiaryText = generated.diary.slice(0, 500); // AI generated diary limited to 500 characters
 
-      if (isUpdateFlow) {
-        // 2a. Update (fuse) existing diary (PATCH)
-        const payload = {
-          content: mergedContent,
-          title: generated.title,
-          mood: generated.mood,
-          keywords: generated.keywords,
-          diary: slicedDiaryText,
-          style: selectedDiary.style,
-        };
+      const payload = {
+        content: trimmedContent,
+        title: generated.title,
+        mood: generated.mood,
+        keywords: generated.keywords,
+        diary: slicedDiaryText,
+        diaryDate: toDiaryDateISOString(selectedDate),
+        style: "diary",
+      };
 
-        const updated = await updateDiary(selectedDiary.id, payload);
+      const created = await createDiary(payload);
 
-        // 3a. Update local state
-        setDiaries((current) =>
-          current.map((d) => (d.id === updated.id ? updated : d)),
-        );
-      } else {
-        // 2b. Create new diary (POST)
-        const payload = {
-          content: mergedContent,
-          title: generated.title,
-          mood: generated.mood,
-          keywords: generated.keywords,
-          diary: slicedDiaryText,
-          diaryDate: toDiaryDateISOString(selectedDate),
-          style: "diary",
-        };
-
-        const created = await createDiary(payload);
-
-        // 3b. Update local state
-        setDiaries((current) => [created, ...current]);
-      }
+      setDiaries((current) => [created, ...current]);
 
       setMemoContent(""); // Clear input text area
       setIsMemoExpanded(false); // Collapse memo input area
-    } catch (err: any) {
-      setError(err?.message || "일기를 생성 및 저장하는 중에 문제가 발생했습니다.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "일기를 생성 및 저장하는 중에 문제가 발생했습니다.");
     } finally {
       setIsSending(false);
     }
@@ -380,6 +357,51 @@ export default function Home() {
       setError("일기를 수정하지 못했습니다. 서버 상태를 확인해주세요.");
     } finally {
       setIsUpdatingDiary(false);
+    }
+  }
+
+  // Edit original sent memo content
+  async function handleUpdateMemo() {
+    if (!selectedDiary) return;
+    if (!selectedDiary.entry?.id) {
+      setError("수정할 기록을 찾지 못했습니다.");
+      return;
+    }
+
+    const trimmed = editedMemoText.trim();
+    if (!trimmed) {
+      setError("기록할 메모 내용을 입력해주세요.");
+      return;
+    }
+
+    if (trimmed.length > MAX_DIARY_LENGTH) {
+      setError(`메모 내용은 ${MAX_DIARY_LENGTH}자 이하로 작성해주세요.`);
+      return;
+    }
+
+    setIsUpdatingMemo(true);
+    setError("");
+
+    try {
+      const generated = await generateDiary(trimmed);
+      const payload = {
+        content: trimmed,
+        title: generated.title,
+        mood: generated.mood,
+        keywords: generated.keywords,
+        diary: generated.diary.slice(0, MAX_EDITED_DIARY_LENGTH),
+        style: selectedDiary.style,
+      };
+
+      const updated = await updateDiary(selectedDiary.id, payload);
+
+      setDiaries((current) =>
+        current.map((d) => (d.id === updated.id ? updated : d)),
+      );
+    } catch {
+      setError("보낸 기록 수정과 AI 일기 재생성에 실패했습니다. 서버 상태를 확인해주세요.");
+    } finally {
+      setIsUpdatingMemo(false);
     }
   }
 
@@ -584,7 +606,7 @@ export default function Home() {
                     <p className="text-xs font-bold text-slate-450 dark:text-slate-400 tracking-wider uppercase">TODAY MEMO</p>
                   </div>
                   <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-                    {selectedDiary ? "메모 추가 및 융합" : "오늘 메모"}
+                    일기 작성
                   </h2>
                   <p className="mt-1 text-xs text-slate-450 dark:text-slate-500 font-semibold">{memoTime}</p>
                 </div>
@@ -603,7 +625,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleSendMemo}
-                    disabled={isSending || (!selectedDiary && isLimitExceeded) || !memoContent.trim() || currentTotalLength > MAX_DIARY_LENGTH}
+                    disabled={isSending || isLimitExceeded || !memoContent.trim() || memoContent.trim().length > MAX_DIARY_LENGTH}
                     className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 dark:bg-indigo-600 px-5 text-sm font-bold text-white shadow-lg shadow-slate-950/10 dark:shadow-indigo-600/20 hover:bg-slate-800 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition active:scale-95"
                   >
                     {isSending ? (
@@ -611,7 +633,7 @@ export default function Home() {
                     ) : (
                       <Send size={15} />
                     )}
-                    {selectedDiary ? "융합 및 생성" : "전송"}
+                    전송
                   </button>
                 </div>
               </div>
@@ -621,58 +643,26 @@ export default function Home() {
                 <textarea
                   value={memoContent}
                   onChange={(event) => setMemoContent(event.target.value)}
-                  placeholder={
-                    previousContentLength > 0
-                      ? (maxMemoInputLength === 0 ? "더 이상 추가할 수 없습니다 (최대 300자)" : "기존 메모에 추가할 내용을 적어보세요...")
-                      : "지금 생각나는 대로 적어보세요..."
-                  }
+                  placeholder="지금 생각나는 대로 적어보세요..."
                   className="flex-1 resize-none bg-transparent text-lg leading-relaxed text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-600"
-                  maxLength={maxMemoInputLength}
+                  maxLength={MAX_DIARY_LENGTH}
                   disabled={isSending}
                 />
                 <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800/80 pt-4 mt-3">
                   <span className="text-xs font-bold text-slate-405 dark:text-slate-500 flex flex-col gap-0.5">
-                    <span>전체 글자 수: {currentTotalLength} / {MAX_DIARY_LENGTH}</span>
-                    {previousContentLength > 0 && (
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
-                        (기존: {previousContentLength}자 + 추가: {memoContent.length}자)
-                      </span>
-                    )}
+                    <span>전체 글자 수: {memoContent.length} / {MAX_DIARY_LENGTH}</span>
                   </span>
                   <span className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1">
                     <Sparkles size={12} className="text-indigo-550 dark:text-indigo-400" />
-                    {selectedDiary ? "기존 메모와 융합 후 재생성" : "AI 분석 후 자동 저장"}
+                    AI 분석 후 자동 저장
                   </span>
                 </div>
               </div>
             </section>
           ) : (
             
-            // Collapsed Today's Memo Strip and Saved Diary logic
+            // Saved Diary logic
             <div className="space-y-5">
-              
-              {/* 4-1. Collapsed Today's Memo block */}
-              <section className="rounded-3xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950/80 p-5 shadow-sm dark:shadow-lg flex items-center justify-between gap-4 transition-all">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">오늘 메모</h3>
-                  <p className="text-xs text-slate-450 dark:text-slate-500 mt-0.5">
-                    {selectedDiary
-                      ? "기존 일기의 메모와 융합하여 새로운 일기를 생성합니다."
-                      : "지금 떠오르는 생각을 기록해보세요."}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsMemoExpanded(true)}
-                  disabled={(!selectedDiary && isLimitExceeded) || !isLoggedIn || (!!selectedDiary && previousContentLength >= MAX_DIARY_LENGTH)}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-250 dark:border-slate-800 px-4 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-slate-950 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-850 dark:hover:border-slate-700 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                >
-                  <Plus size={14} />
-                  {selectedDiary ? "메모 추가하기" : "입력하기"}
-                </button>
-              </section>
-
-              {/* 4-2. Saved Diary details */}
               {selectedDiary ? (
                 <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all">
                   <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -764,20 +754,71 @@ export default function Home() {
                   </div>
 
                   {/* My Sent Record */}
-                  {selectedDiary.entry?.content && (
+                  {selectedDiary.entry?.content !== undefined && (
                     <div className="mt-5 border-t border-slate-100 dark:border-slate-900 pt-4 space-y-2">
                       <div className="flex items-center justify-between">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase flex items-center gap-1.5">
                           <MessageSquare size={13} className="text-indigo-550 dark:text-indigo-400" />
                           내가 보낸 기록
                         </h4>
-                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-550">
-                          {formatTransmissionTime(selectedDiary.createdAt)}
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-550 flex items-center gap-2">
+                          <span>{editedMemoText.length} / {MAX_DIARY_LENGTH}</span>
+                          <span className="text-[9px] text-slate-400 dark:text-slate-500">|</span>
+                          <span>{formatTransmissionTime(selectedDiary.createdAt)}</span>
                         </span>
                       </div>
-                      <div className="rounded-xl bg-slate-50/50 dark:bg-slate-900/30 p-3 text-xs leading-relaxed text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-900/60 whitespace-pre-wrap">
-                        {selectedDiary.entry.content}
+                      <div className="rounded-xl bg-slate-50/50 dark:bg-slate-900/30 p-3 border border-slate-100 dark:border-slate-900/65 relative">
+                        <textarea
+                          value={editedMemoText}
+                          onChange={(e) => setEditedMemoText(e.target.value)}
+                          className="w-full min-h-[100px] resize-none bg-transparent text-xs leading-relaxed text-slate-650 dark:text-slate-400 outline-none"
+                          maxLength={MAX_DIARY_LENGTH}
+                          disabled={isUpdatingMemo}
+                        />
+                        <div className="flex justify-end mt-1">
+                          <button
+                            type="button"
+                            onClick={handleUpdateMemo}
+                            disabled={isUpdatingMemo || !editedMemoText.trim() || editedMemoText.length > MAX_DIARY_LENGTH}
+                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-slate-900 dark:bg-indigo-600 px-2.5 text-[10px] font-bold text-white shadow hover:bg-slate-800 dark:hover:bg-indigo-500 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {isUpdatingMemo ? (
+                              <Loader2 className="animate-spin" size={10} />
+                            ) : (
+                              <Pencil size={10} />
+                            )}
+                            수정 후 재생성
+                          </button>
+                        </div>
                       </div>
+                      {selectedDiary.entry.histories.length > 0 && (
+                        <div className="rounded-xl border border-slate-100 dark:border-slate-900 bg-white/70 dark:bg-slate-950/50 p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                              수정 기록
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                              최근 {selectedDiary.entry.histories.length}개
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {selectedDiary.entry.histories.map((history) => (
+                              <div
+                                key={history.id}
+                                className="rounded-lg bg-slate-50 dark:bg-slate-900/60 p-2"
+                              >
+                                <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                                  <span>{formatTransmissionTime(history.createdAt)}</span>
+                                  <span>수정됨</span>
+                                </div>
+                                <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                  {history.previousContent}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>

@@ -41,7 +41,17 @@ function toClientDiary(diary: {
   style: DiaryStyle;
   diaryDate: Date;
   createdAt: Date;
-  entry: { content: string; source: string } | null;
+  entry: {
+    id: string;
+    content: string;
+    source: string;
+    histories: Array<{
+      id: string;
+      previousContent: string;
+      nextContent: string;
+      createdAt: Date;
+    }>;
+  } | null;
 }) {
   return {
     id: diary.id,
@@ -52,7 +62,15 @@ function toClientDiary(diary: {
     style: diary.style.toLowerCase(),
     diaryDate: diary.diaryDate.toISOString(),
     createdAt: diary.createdAt.toISOString(),
-    entry: diary.entry,
+    entry: diary.entry
+      ? {
+          ...diary.entry,
+          histories: diary.entry.histories.map((history) => ({
+            ...history,
+            createdAt: history.createdAt.toISOString(),
+          })),
+        }
+      : null,
   };
 }
 
@@ -92,6 +110,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     select: {
       id: true,
       entryId: true,
+      entry: {
+        select: {
+          content: true,
+        },
+      },
     },
   });
 
@@ -102,9 +125,21 @@ export async function PATCH(request: Request, context: RouteContext) {
   const style = toDiaryStyle(body.style);
   const diary = await prisma.$transaction(async (tx) => {
     if (existingDiary.entryId && body.content?.trim()) {
+      const nextContent = body.content.trim();
+      if (existingDiary.entry?.content !== nextContent) {
+        await tx.diaryEntryHistory.create({
+          data: {
+            entryId: existingDiary.entryId,
+            userId: user.id,
+            previousContent: existingDiary.entry?.content ?? "",
+            nextContent,
+          },
+        });
+      }
+
       await tx.diaryEntry.update({
         where: { id: existingDiary.entryId },
-        data: { content: body.content.trim() },
+        data: { content: nextContent },
       });
     }
 
@@ -117,7 +152,25 @@ export async function PATCH(request: Request, context: RouteContext) {
         body: body.diary!.trim(),
         ...(style ? { style } : {}),
       },
-      include: { entry: { select: { content: true, source: true } } },
+      include: {
+        entry: {
+          select: {
+            id: true,
+            content: true,
+            source: true,
+            histories: {
+              select: {
+                id: true,
+                previousContent: true,
+                nextContent: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: "desc" },
+              take: 5,
+            },
+          },
+        },
+      },
     });
   });
 

@@ -13,8 +13,15 @@ export type SavedDiary = DiaryResponse & {
   diaryDate: string;
   createdAt: string;
   entry: {
+    id: string;
     content: string;
     source: string;
+    histories: Array<{
+      id: string;
+      previousContent: string;
+      nextContent: string;
+      createdAt: string;
+    }>;
   } | null;
 };
 
