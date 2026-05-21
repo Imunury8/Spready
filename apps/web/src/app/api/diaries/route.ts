@@ -2,7 +2,7 @@ import { DiaryStyle } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { getDemoUser } from "@/lib/users";
+import { getCurrentUser } from "@/lib/users";
 
 type CreateDiaryBody = {
   content?: string;
@@ -58,7 +58,10 @@ function getDayRange(date: Date) {
 }
 
 export async function GET() {
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ diaries: [] });
+  }
   const diaries = await prisma.diary.findMany({
     where: { userId: user.id },
     include: { entry: { select: { content: true, source: true } } },
@@ -79,14 +82,31 @@ export async function POST(request: Request) {
     );
   }
 
-  if (body.content.trim().length > 500 || body.diary.trim().length > 500) {
+  if (body.content.trim().length > 300 || body.diary.trim().length > 500) {
     return NextResponse.json(
-      { message: "content and diary must be 500 characters or less" },
+      { message: "content must be 300 characters or less and diary must be 500 characters or less" },
       { status: 400 },
     );
   }
 
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json(
+      { message: "로그인이 필요합니다" },
+      { status: 401 }
+    );
+  }
+
+  const diaryCount = await prisma.diary.count({
+    where: { userId: user.id },
+  });
+  if (diaryCount >= 10) {
+    return NextResponse.json(
+      { message: "사용 한도를 초과했습니다. 새로운 일기를 추가할 수 없습니다." },
+      { status: 403 }
+    );
+  }
+
   const diaryDate = body.diaryDate ? new Date(body.diaryDate) : new Date();
 
   if (Number.isNaN(diaryDate.getTime())) {

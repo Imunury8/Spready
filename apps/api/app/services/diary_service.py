@@ -40,7 +40,8 @@ async def generate_diary(
                 "role": "system",
                 "content": (
                     "You write Korean diary reflections from short daily notes. "
-                    "Return concise, emotionally grounded output."
+                    "Return concise, emotionally grounded output. "
+                    "The diary body must be strictly 500 characters or less."
                 ),
             },
             {
@@ -48,11 +49,14 @@ async def generate_diary(
                 "content": (
                     f"Style: {request.style}\n"
                     f"Entries:\n{source_text}\n\n"
-                    "Create a diary title, mood label, 3 to 5 keywords, and diary body."
+                    "Create a diary title, mood label, 3 to 5 keywords, and diary body (strictly 500 characters or less)."
                 ),
             },
         ],
         text_format=GenerateDiaryResponse,
     )
 
-    return response.output_parsed
+    res = response.output_parsed
+    if res and res.diary:
+        res.diary = res.diary[:500]
+    return res

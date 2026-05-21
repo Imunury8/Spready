@@ -2,7 +2,7 @@ import { DiaryStyle } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { getDemoUser } from "@/lib/users";
+import { getCurrentUser } from "@/lib/users";
 
 type RouteContext = {
   params: Promise<{
@@ -68,16 +68,22 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   if (
-    (body.content?.trim().length ?? 0) > 500 ||
-    body.diary.trim().length > 500
+    (body.content?.trim().length ?? 0) > 300 ||
+    body.diary.trim().length > 800
   ) {
     return NextResponse.json(
-      { message: "content and diary must be 500 characters or less" },
+      { message: "content must be 300 characters or less and diary must be 800 characters or less" },
       { status: 400 },
     );
   }
 
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json(
+      { message: "로그인이 필요합니다" },
+      { status: 401 }
+    );
+  }
   const existingDiary = await prisma.diary.findFirst({
     where: {
       id,
@@ -120,7 +126,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const user = await getDemoUser();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json(
+      { message: "로그인이 필요합니다" },
+      { status: 401 }
+    );
+  }
 
   const diary = await prisma.diary.findFirst({
     where: {

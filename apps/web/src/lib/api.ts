@@ -140,3 +140,27 @@ export async function deleteDiary(id: string): Promise<void> {
     throw new Error("Failed to delete diary");
   }
 }
+
+export async function getUserPreference(): Promise<number> {
+  const response = await fetch("/api/user/preference");
+  if (!response.ok) {
+    throw new Error("Failed to load preference");
+  }
+  const data = (await response.json()) as { reminderHour: number };
+  return data.reminderHour;
+}
+
+export async function updateUserPreference(reminderHour: number): Promise<number> {
+  const response = await fetch("/api/user/preference", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ reminderHour }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to update preference");
+  }
+  const data = (await response.json()) as { reminderHour: number };
+  return data.reminderHour;
+}
