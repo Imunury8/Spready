@@ -38,6 +38,13 @@ const MAX_DIARY_LENGTH = 300;
 const MAX_EDITED_DIARY_LENGTH = 800;
 const TOTAL_LIMIT = 10;
 
+const STYLES = [
+  { id: "friend", name: "공감형 친구", emoji: "🤝" },
+  { id: "coach", name: "라이프 코치", emoji: "🧭" },
+  { id: "writer", name: "감성 소설가", emoji: "✍️" },
+  { id: "fairytale", name: "동화 작가", emoji: "🦄" },
+] as const;
+
 function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -109,6 +116,124 @@ function formatTransmissionTime(dateString: string) {
   return `${hh}:${min}`;
 }
 
+function getMoodStyle(mood: string, isSelected: boolean, hasDiary: boolean): string {
+  if (!hasDiary) {
+    return isSelected
+      ? "bg-slate-900 dark:bg-indigo-600 text-white shadow-md shadow-slate-900/10 dark:shadow-indigo-600/30 scale-105"
+      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white border-transparent";
+  }
+
+  const norm = mood.trim();
+  
+  let styles = {
+    lightBg: "bg-slate-50",
+    lightText: "text-slate-700",
+    lightBorder: "border-slate-200/60",
+    darkBg: "dark:bg-slate-900/40",
+    darkText: "dark:text-slate-300",
+    darkBorder: "dark:border-slate-800",
+    lightHover: "hover:bg-slate-100",
+    darkHover: "dark:hover:bg-slate-800/80",
+  };
+
+  if (norm.includes("기쁨") || norm.includes("행복") || norm.includes("좋음") || norm.includes("신남")) {
+    styles = {
+      lightBg: "bg-amber-50/70",
+      lightText: "text-amber-800",
+      lightBorder: "border-amber-200/50",
+      darkBg: "dark:bg-amber-950/20",
+      darkText: "dark:text-amber-300",
+      darkBorder: "dark:border-amber-900/30",
+      lightHover: "hover:bg-amber-100/60",
+      darkHover: "dark:hover:bg-amber-900/20",
+    };
+  } else if (norm.includes("슬픔") || norm.includes("우울") || norm.includes("눈물") || norm.includes("외로움")) {
+    styles = {
+      lightBg: "bg-blue-50/70",
+      lightText: "text-blue-800",
+      lightBorder: "border-blue-200/50",
+      darkBg: "dark:bg-blue-950/20",
+      darkText: "dark:text-blue-300",
+      darkBorder: "dark:border-blue-900/30",
+      lightHover: "hover:bg-blue-100/60",
+      darkHover: "dark:hover:bg-blue-900/20",
+    };
+  } else if (norm.includes("차분") || norm.includes("평온") || norm.includes("휴식") || norm.includes("만족")) {
+    styles = {
+      lightBg: "bg-emerald-50/70",
+      lightText: "text-emerald-800",
+      lightBorder: "border-emerald-200/50",
+      darkBg: "dark:bg-emerald-950/20",
+      darkText: "dark:text-emerald-300",
+      darkBorder: "dark:border-emerald-900/30",
+      lightHover: "hover:bg-emerald-100/60",
+      darkHover: "dark:hover:bg-emerald-900/20",
+    };
+  } else if (norm.includes("피곤") || norm.includes("지침") || norm.includes("스트레스") || norm.includes("힘듦")) {
+    styles = {
+      lightBg: "bg-purple-50/70",
+      lightText: "text-purple-800",
+      lightBorder: "border-purple-200/50",
+      darkBg: "dark:bg-purple-950/20",
+      darkText: "dark:text-purple-300",
+      darkBorder: "dark:border-purple-900/30",
+      lightHover: "hover:bg-purple-100/60",
+      darkHover: "dark:hover:bg-purple-900/20",
+    };
+  } else if (norm.includes("불안") || norm.includes("걱정") || norm.includes("긴장") || norm.includes("두려움")) {
+    styles = {
+      lightBg: "bg-rose-50/70",
+      lightText: "text-rose-800",
+      lightBorder: "border-rose-200/50",
+      darkBg: "dark:bg-rose-950/20",
+      darkText: "dark:text-rose-300",
+      darkBorder: "dark:border-rose-900/30",
+      lightHover: "hover:bg-rose-100/60",
+      darkHover: "dark:hover:bg-rose-900/20",
+    };
+  } else if (norm.includes("화남") || norm.includes("분노") || norm.includes("짜증")) {
+    styles = {
+      lightBg: "bg-orange-50/70",
+      lightText: "text-orange-800",
+      lightBorder: "border-orange-200/50",
+      darkBg: "dark:bg-orange-950/20",
+      darkText: "dark:text-orange-300",
+      darkBorder: "dark:border-orange-900/30",
+      lightHover: "hover:bg-orange-100/60",
+      darkHover: "dark:hover:bg-orange-900/20",
+    };
+  }
+
+  if (isSelected) {
+    return "bg-slate-900 dark:bg-indigo-600 text-white shadow-md shadow-slate-900/10 dark:shadow-indigo-600/30 border border-slate-900 dark:border-indigo-600 scale-105";
+  }
+
+  return `${styles.lightBg} ${styles.darkBg} ${styles.lightText} ${styles.darkText} border ${styles.lightBorder} ${styles.darkBorder} ${styles.lightHover} ${styles.darkHover}`;
+}
+
+function getMoodDotColor(mood: string): string {
+  const norm = mood.trim();
+  if (norm.includes("기쁨") || norm.includes("행복") || norm.includes("좋음") || norm.includes("신남")) {
+    return "bg-amber-500";
+  }
+  if (norm.includes("슬픔") || norm.includes("우울") || norm.includes("눈물") || norm.includes("외로움")) {
+    return "bg-blue-500 dark:bg-blue-400";
+  }
+  if (norm.includes("차분") || norm.includes("평온") || norm.includes("휴식") || norm.includes("만족")) {
+    return "bg-emerald-500";
+  }
+  if (norm.includes("피곤") || norm.includes("지침") || norm.includes("스트레스") || norm.includes("힘듦")) {
+    return "bg-purple-500";
+  }
+  if (norm.includes("불안") || norm.includes("걱정") || norm.includes("긴장") || norm.includes("두려움")) {
+    return "bg-rose-500";
+  }
+  if (norm.includes("화남") || norm.includes("분노") || norm.includes("짜증")) {
+    return "bg-orange-550 dark:bg-orange-500";
+  }
+  return "bg-slate-450 dark:bg-indigo-500";
+}
+
 export default function Home() {
   const { data: session, status: sessionStatus } = useSession();
 
@@ -136,6 +261,9 @@ export default function Home() {
   // Saved memo editing text state
   const [editedMemoText, setEditedMemoText] = useState("");
   const [isUpdatingMemo, setIsUpdatingMemo] = useState(false);
+
+  // AI diary style state
+  const [selectedStyle, setSelectedStyle] = useState<"friend" | "coach" | "writer" | "fairytale">("friend");
 
   // Preference states
   const [generationTime, setGenerationTime] = useState("21:00");
@@ -221,9 +349,19 @@ export default function Home() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditedDiaryText(selectedDiary.diary);
       setEditedMemoText(selectedDiary.entry?.content || "");
+      
+      // Auto-resolve style selector based on saved diary style
+      if (selectedDiary.style === "reflection") {
+        setSelectedStyle("friend");
+      } else if (selectedDiary.style === "summary") {
+        setSelectedStyle("coach");
+      } else {
+        setSelectedStyle("writer");
+      }
     } else {
       setEditedDiaryText("");
       setEditedMemoText("");
+      setSelectedStyle("friend"); // default style for new diaries
     }
   }, [selectedDiary]);
 
@@ -294,7 +432,7 @@ export default function Home() {
 
     try {
       // 1. Generate diary reflection with FastAPI via Next.js api proxy
-      const generated = await generateDiary(trimmedContent);
+      const generated = await generateDiary(trimmedContent, selectedStyle);
       const slicedDiaryText = generated.diary.slice(0, 500); // AI generated diary limited to 500 characters
 
       const payload = {
@@ -304,7 +442,7 @@ export default function Home() {
         keywords: generated.keywords,
         diary: slicedDiaryText,
         diaryDate: toDiaryDateISOString(selectedDate),
-        style: "diary",
+        style: selectedStyle === "friend" ? "reflection" : selectedStyle === "coach" ? "summary" : "diary",
       };
 
       const created = await createDiary(payload);
@@ -383,14 +521,14 @@ export default function Home() {
     setError("");
 
     try {
-      const generated = await generateDiary(trimmed);
+      const generated = await generateDiary(trimmed, selectedStyle);
       const payload = {
         content: trimmed,
         title: generated.title,
         mood: generated.mood,
         keywords: generated.keywords,
         diary: generated.diary.slice(0, MAX_EDITED_DIARY_LENGTH),
-        style: selectedDiary.style,
+        style: selectedStyle === "friend" ? "reflection" : selectedStyle === "coach" ? "summary" : "diary",
       };
 
       const updated = await updateDiary(selectedDiary.id, payload);
@@ -473,11 +611,13 @@ export default function Home() {
             <div className="grid grid-cols-7 gap-1">
               {monthDays.map((date, index) => {
                 if (!date) {
-                  return <div key={`blank-${index}`} className="h-10" />;
+                  return <div key={`blank-${index}`} className="min-h-[68px]" />;
                 }
 
                 const key = toDateKey(date);
-                const hasDiary = Boolean(diariesByDate[key]?.length);
+                const dayDiaries = diariesByDate[key] ?? [];
+                const dayDiary = dayDiaries[0] ?? null;
+                const hasDiary = Boolean(dayDiaries.length);
                 const isSelected = key === selectedDateKey;
 
                 return (
@@ -486,26 +626,46 @@ export default function Home() {
                     type="button"
                     onClick={() => selectDate(date)}
                     aria-label={`${date.getDate()}일 ${
-                      hasDiary ? "저장된 일기 있음" : "저장된 일기 없음"
+                      hasDiary ? `저장된 일기 있음, 감정: ${dayDiary?.mood}` : "저장된 일기 없음"
                     }`}
                     className={[
-                      "relative h-11 rounded-xl text-sm font-semibold transition-all duration-200 flex flex-col items-center justify-center gap-0.5",
-                      isSelected
-                        ? "bg-slate-900 dark:bg-indigo-600 text-white shadow-md shadow-slate-900/10 dark:shadow-indigo-600/30 scale-105"
-                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white",
+                      "relative min-h-[68px] py-1.5 px-0.5 rounded-2xl text-xs font-bold transition-all duration-200 flex flex-col items-center justify-between gap-1 select-none",
+                      getMoodStyle(dayDiary?.mood ?? "", isSelected, hasDiary)
                     ].join(" ")}
                   >
-                    <span>{date.getDate()}</span>
-                    {hasDiary ? (
-                      <span
-                        className={[
-                          "size-1.5 rounded-full mt-0.5",
-                          isSelected ? "bg-white" : "bg-slate-900 dark:bg-indigo-500",
-                        ].join(" ")}
-                      />
+                    <span className="text-xs font-semibold leading-none">{date.getDate()}</span>
+                    {hasDiary && dayDiary ? (
+                      <div className="flex flex-col gap-0.5 w-full items-center mt-auto">
+                        <span
+                          className={[
+                            "size-1 rounded-full mb-1",
+                            isSelected ? "bg-white" : getMoodDotColor(dayDiary.mood),
+                          ].join(" ")}
+                        />
+                        <div className="flex flex-col gap-0.5 w-full px-0.5">
+                          {dayDiary.keywords.slice(0, 2).map((keyword) => (
+                            <span
+                              key={keyword}
+                              className={[
+                                "text-[8px] font-medium leading-none px-1 py-0.5 rounded-md truncate max-w-full text-center tracking-tight",
+                                isSelected
+                                  ? "bg-white/20 text-white"
+                                  : "bg-black/[0.04] dark:bg-white/[0.08]"
+                              ].join(" ")}
+                            >
+                              #{keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     ) : (
-                      // Dot placeholder to keep layout stable
-                      <span className="size-1.5 mt-0.5 opacity-0" />
+                      <div className="flex flex-col gap-0.5 w-full items-center mt-auto opacity-0 pointer-events-none">
+                        <span className="size-1 rounded-full mb-1 bg-transparent" />
+                        <div className="flex flex-col gap-0.5 w-full px-0.5">
+                          <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
+                          <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
+                        </div>
+                      </div>
                     )}
                   </button>
                 );
@@ -638,6 +798,32 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Style Selector */}
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">AI 일기 스타일 선택</p>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  {STYLES.map((st) => {
+                    const isSelected = selectedStyle === st.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setSelectedStyle(st.id)}
+                        className={[
+                          "flex h-9 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-all duration-200",
+                          isSelected
+                            ? "bg-slate-900 border-slate-900 text-white dark:bg-indigo-600 dark:border-indigo-600"
+                            : "bg-white border-slate-200 text-slate-655 hover:bg-slate-50 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-900"
+                        ].join(" ")}
+                      >
+                        <span>{st.emoji}</span>
+                        <span>{st.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Text Area Card */}
               <div className="flex h-[420px] flex-col rounded-3xl border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/40 p-5 transition-all">
                 <textarea
@@ -767,6 +953,32 @@ export default function Home() {
                           <span>{formatTransmissionTime(selectedDiary.createdAt)}</span>
                         </span>
                       </div>
+                      {/* Style Selector inside My Sent Record card */}
+                      <div className="bg-slate-50/50 dark:bg-slate-900/30 p-3 rounded-xl border border-slate-100 dark:border-slate-900/65 flex flex-col gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">재생성할 AI 스타일 선택</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {STYLES.map((st) => {
+                            const isSelected = selectedStyle === st.id;
+                            return (
+                              <button
+                                key={st.id}
+                                type="button"
+                                onClick={() => setSelectedStyle(st.id)}
+                                className={[
+                                  "flex h-7 items-center justify-center gap-1 rounded-lg border px-2.5 text-[10px] font-bold transition-all duration-150",
+                                  isSelected
+                                    ? "bg-slate-900 border-slate-900 text-white dark:bg-indigo-600 dark:border-indigo-600"
+                                    : "bg-white border-slate-200 text-slate-655 hover:bg-slate-50 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-900"
+                                ].join(" ")}
+                              >
+                                <span>{st.emoji}</span>
+                                <span>{st.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       <div className="rounded-xl bg-slate-50/50 dark:bg-slate-900/30 p-3 border border-slate-100 dark:border-slate-900/65 relative">
                         <textarea
                           value={editedMemoText}

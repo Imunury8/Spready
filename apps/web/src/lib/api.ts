@@ -31,7 +31,7 @@ export type DiaryPayload = DiaryResponse & {
   style?: string;
 };
 
-export async function generateDiary(content: string): Promise<DiaryResponse> {
+export async function generateDiary(content: string, style = "diary"): Promise<DiaryResponse> {
   const response = await fetch(`${API_BASE_URL}/api/diary/generate`, {
     method: "POST",
     headers: {
@@ -44,7 +44,7 @@ export async function generateDiary(content: string): Promise<DiaryResponse> {
           source: "web",
         },
       ],
-      style: "diary",
+      style,
     }),
   });
 

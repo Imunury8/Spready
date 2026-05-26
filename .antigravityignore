@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.next/
+.git/
+.venv/
+.pytest_cache/
+__pycache__/
+.codex/
