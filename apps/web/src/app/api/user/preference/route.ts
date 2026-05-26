@@ -34,7 +34,7 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json({ reminderHour: updatedUser.reminderHour });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { message: "설정을 저장하지 못했습니다." },
       { status: 500 }

@@ -31,6 +31,20 @@ Web: http://localhost:3000
 
 API: http://localhost:8000/docs
 
+## Harness
+
+Run the project verification harness before shipping changes:
+
+```powershell
+npm test
+```
+
+This executes the FastAPI test harness, Next.js lint, and the production web build. To run only the backend API harness:
+
+```powershell
+npm run test:api
+```
+
 Prisma Studio:
 
 ```powershell
