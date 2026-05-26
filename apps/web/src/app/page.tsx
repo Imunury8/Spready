@@ -238,10 +238,8 @@ export default function Home() {
   const { data: session, status: sessionStatus } = useSession();
 
   // Core Theme State
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof window === "undefined") return "light";
-    return (localStorage.getItem("theme") as "light" | "dark" | null) || "light";
-  });
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [mounted, setMounted] = useState(false);
 
   const [diaries, setDiaries] = useState<SavedDiary[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -265,6 +263,29 @@ export default function Home() {
   // AI diary style state
   const [selectedStyle, setSelectedStyle] = useState<"friend" | "coach" | "writer" | "fairytale">("friend");
 
+  // Premium UI toast & confetti states
+  type ToastType = "success" | "error" | "info";
+  interface Toast {
+    id: string;
+    message: string;
+    type: ToastType;
+  }
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  function showToast(message: string, type: ToastType = "info") {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((current) => [...current, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((current) => current.filter((t) => t.id !== id));
+    }, 4500);
+  }
+
+  function triggerConfetti() {
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 4500);
+  }
+
   // Preference states
   const [generationTime, setGenerationTime] = useState("21:00");
   const [generationOpen, setGenerationOpen] = useState(false);
@@ -278,22 +299,24 @@ export default function Home() {
 
   // Initialize Theme on mount
   useEffect(() => {
+    setMounted(true);
+    const savedTheme = (localStorage.getItem("theme") as "light" | "dark" | null) || "light";
+    setTheme(savedTheme);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     if (theme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, [theme]);
+  }, [theme, mounted]);
 
   function toggleTheme() {
     const nextTheme = theme === "light" ? "dark" : "light";
     setTheme(nextTheme);
     localStorage.setItem("theme", nextTheme);
-    if (nextTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
   }
 
   // Load diaries and preferences on login
@@ -397,15 +420,16 @@ export default function Home() {
     try {
       const hour = timeStrToHour(timeStr);
       await updateUserPreference(hour);
+      showToast("일기 생성 시간이 성공적으로 업데이트되었습니다.", "success");
     } catch {
-      setError("알림 시간 설정을 저장하지 못했습니다.");
+      showToast("알림 시간 설정을 저장하지 못했습니다.", "error");
     }
   }
 
   // Diary creation flow for a selected date without an existing diary
   async function handleSendMemo() {
     if (!isLoggedIn) {
-      setError("일기를 저장하려면 로그인이 필요합니다.");
+      showToast("일기를 저장하려면 로그인이 필요합니다.", "error");
       return;
     }
 
@@ -413,17 +437,17 @@ export default function Home() {
     if (!trimmedContent) return;
 
     if (selectedDiary) {
-      setError("이미 저장된 일기는 아래 기록 수정 기능을 사용해주세요.");
+      showToast("이미 저장된 일기는 아래 기록 수정 기능을 사용해주세요.", "error");
       return;
     }
 
     if (isLimitExceeded) {
-      setError("사용 한도를 초과했습니다. 새로운 일기를 작성할 수 없습니다.");
+      showToast("사용 한도를 초과했습니다. 새로운 일기를 작성할 수 없습니다.", "error");
       return;
     }
 
     if (trimmedContent.length > MAX_DIARY_LENGTH) {
-      setError(`기록의 길이는 ${MAX_DIARY_LENGTH}자 이하로 제한됩니다.`);
+      showToast(`기록의 길이는 ${MAX_DIARY_LENGTH}자 이하로 제한됩니다.`, "error");
       return;
     }
 
@@ -451,8 +475,10 @@ export default function Home() {
 
       setMemoContent(""); // Clear input text area
       setIsMemoExpanded(false); // Collapse memo input area
+      showToast("새로운 하루가 성공적으로 기록되었습니다!", "success");
+      triggerConfetti();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "일기를 생성 및 저장하는 중에 문제가 발생했습니다.");
+      showToast(err instanceof Error ? err.message : "일기를 생성 및 저장하는 중에 문제가 발생했습니다.", "error");
     } finally {
       setIsSending(false);
     }
@@ -464,12 +490,12 @@ export default function Home() {
 
     const trimmed = editedDiaryText.trim();
     if (!trimmed) {
-      setError("일기 내용을 입력해주세요.");
+      showToast("일기 내용을 입력해주세요.", "error");
       return;
     }
 
     if (trimmed.length > MAX_EDITED_DIARY_LENGTH) {
-      setError("수정할 본문은 800자 이하로 작성해주세요.");
+      showToast("수정할 본문은 800자 이하로 작성해주세요.", "error");
       return;
     }
 
@@ -491,8 +517,9 @@ export default function Home() {
       setDiaries((current) =>
         current.map((d) => (d.id === updated.id ? updated : d)),
       );
+      showToast("일기 본문 수정이 완료되었습니다.", "success");
     } catch {
-      setError("일기를 수정하지 못했습니다. 서버 상태를 확인해주세요.");
+      showToast("일기를 수정하지 못했습니다. 서버 상태를 확인해주세요.", "error");
     } finally {
       setIsUpdatingDiary(false);
     }
@@ -502,18 +529,18 @@ export default function Home() {
   async function handleUpdateMemo() {
     if (!selectedDiary) return;
     if (!selectedDiary.entry?.id) {
-      setError("수정할 기록을 찾지 못했습니다.");
+      showToast("수정할 기록을 찾지 못했습니다.", "error");
       return;
     }
 
     const trimmed = editedMemoText.trim();
     if (!trimmed) {
-      setError("기록할 메모 내용을 입력해주세요.");
+      showToast("기록할 메모 내용을 입력해주세요.", "error");
       return;
     }
 
     if (trimmed.length > MAX_DIARY_LENGTH) {
-      setError(`메모 내용은 ${MAX_DIARY_LENGTH}자 이하로 작성해주세요.`);
+      showToast(`메모 내용은 ${MAX_DIARY_LENGTH}자 이하로 작성해주세요.`, "error");
       return;
     }
 
@@ -536,8 +563,10 @@ export default function Home() {
       setDiaries((current) =>
         current.map((d) => (d.id === updated.id ? updated : d)),
       );
+      showToast("기존 기록이 수정되었으며, AI가 일기를 새롭게 융합 생성했습니다!", "success");
+      triggerConfetti();
     } catch {
-      setError("보낸 기록 수정과 AI 일기 재생성에 실패했습니다. 서버 상태를 확인해주세요.");
+      showToast("보낸 기록 수정과 AI 일기 재생성에 실패했습니다. 서버 상태를 확인해주세요.", "error");
     } finally {
       setIsUpdatingMemo(false);
     }
@@ -553,23 +582,116 @@ export default function Home() {
       setDiaries((current) =>
         current.filter((currentDiary) => currentDiary.id !== diary.id),
       );
+      showToast("일기 기록이 성공적으로 삭제되었습니다.", "info");
     } catch {
-      setError("일기를 삭제하지 못했습니다. 서버 상태를 확인해주세요.");
+      showToast("일기를 삭제하지 못했습니다. 서버 상태를 확인해주세요.", "error");
     } finally {
       setDeletingDiaryId(null);
     }
   }
 
   return (
-    <div className={`min-h-screen ${theme === "dark" ? "dark bg-slate-900 text-slate-100" : "bg-slate-50 text-slate-800"} p-4 sm:p-6 font-sans transition-colors duration-300`}>
+    <div className={`min-h-screen ${mounted && theme === "dark" ? "dark bg-slate-900 text-slate-100" : "bg-slate-50 text-slate-800"} p-4 sm:p-6 font-sans transition-colors duration-300 relative overflow-hidden`}>
+      {/* Floating background atmospheric blur orbs */}
+      <div className="absolute top-1/4 left-1/4 -z-10 size-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 -z-10 size-96 rounded-full bg-purple-500/10 blur-3xl pointer-events-none animate-pulse [animation-duration:8s]" />
+
+      {/* High-Performance Confetti Particle System */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
+          {Array.from({ length: 60 }).map((_, idx) => {
+            const left = Math.random() * 100;
+            const delay = Math.random() * 0.8;
+            const duration = 2 + Math.random() * 2;
+            const size = 6 + Math.random() * 8;
+            const shapes = ['rounded-full', 'rounded-sm', 'rotate-45'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            const colors = [
+              'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
+              'bg-amber-400', 'bg-emerald-400', 'bg-blue-400'
+            ];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            return (
+              <div
+                key={idx}
+                className={`absolute top-0 animate-fall ${shape} ${color}`}
+                style={{
+                  left: `${left}%`,
+                  width: `${size}px`,
+                  height: `${size}px`,
+                  animationDelay: `${delay}s`,
+                  animationDuration: `${duration}s`,
+                  opacity: 0.8 + Math.random() * 0.2,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Floating Toast Notification Stack */}
+      <div className="fixed top-6 right-6 z-[120] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        {toasts.map((t) => {
+          const bgClass = 
+            t.type === "success" 
+              ? "bg-emerald-500/90 dark:bg-emerald-600/90 border-emerald-400/30" 
+              : t.type === "error"
+              ? "bg-red-500/90 dark:bg-red-600/90 border-red-400/30"
+              : "bg-indigo-500/90 dark:bg-indigo-600/90 border-indigo-400/30";
+          return (
+            <div
+              key={t.id}
+              className={[
+                "pointer-events-auto flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-bold text-white shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2 fade-in duration-200",
+                bgClass
+              ].join(" ")}
+            >
+              <span className="text-base">
+                {t.type === "success" ? "✨" : t.type === "error" ? "⚠️" : "ℹ️"}
+              </span>
+              <span className="flex-1">{t.message}</span>
+              <button
+                type="button"
+                onClick={() => setToasts((curr) => curr.filter((toast) => toast.id !== t.id))}
+                className="text-white/60 hover:text-white transition active:scale-90"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
       <div className="mx-auto grid min-h-[calc(100vh-32px)] max-w-7xl items-stretch gap-6 lg:min-h-[calc(100vh-48px)] lg:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)]">
         
         {/* Left Pane */}
         <aside className="flex min-w-0 flex-col gap-5">
           <div className="px-2">
             <div className="mb-2 flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-650 dark:bg-indigo-600 font-black text-white shadow-lg shadow-indigo-600/10 text-lg">
-                S
+              <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 shadow-lg shadow-indigo-500/5 p-1 transition-all duration-300">
+                <svg className="size-full text-indigo-600 dark:text-indigo-400" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Constellation book outline */}
+                  <path d="M22 32 L46 22 M46 22 L78 32 M78 32 L78 78 M78 78 L46 68 M46 68 L22 78 M22 78 L22 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" strokeDasharray="3.5 3.5" />
+                  <path d="M46 22 L46 68" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.6" strokeDasharray="3.5 3.5" />
+                  
+                  {/* Connected starry memories */}
+                  <path d="M22 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+                  <path d="M78 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+                  
+                  {/* Star nodes */}
+                  <circle cx="22" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
+                  <circle cx="46" cy="22" r="6" className="fill-indigo-500 dark:fill-indigo-300" />
+                  <circle cx="78" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
+                  <circle cx="78" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
+                  <circle cx="46" cy="68" r="6.5" className="fill-indigo-600 dark:fill-indigo-400" />
+                  <circle cx="22" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
+                  
+                  {/* Glowing cosmic nodes */}
+                  <circle cx="34" cy="46" r="2.5" className="fill-indigo-450 dark:fill-indigo-200 animate-ping" />
+                  <circle cx="66" cy="50" r="2.5" className="fill-indigo-400 dark:fill-indigo-200" />
+                  <circle cx="50" cy="40" r="2" className="fill-indigo-500 dark:fill-indigo-300" />
+                </svg>
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Spready</h1>
@@ -728,7 +850,7 @@ export default function Home() {
                 <div className="h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-950 border border-slate-300/40 dark:border-slate-850">
                   <div
                     className={[
-                      "h-full rounded-full transition-all duration-500",
+                      "h-full rounded-full transition-all duration-500 pulse-glow",
                       isLimitExceeded ? "bg-red-500 shadow-md shadow-red-500/20" : "bg-indigo-500 shadow-md shadow-indigo-500/20"
                     ].join(" ")}
                     style={{ width: `${Math.min((diaries.length / TOTAL_LIMIT) * 100, 100)}%` }}
@@ -1071,7 +1193,7 @@ export default function Home() {
         title={theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
         className="fixed bottom-6 right-6 z-55 grid size-12 place-items-center rounded-full border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md text-slate-650 dark:text-slate-300 shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
       >
-        {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
+        {!mounted || theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
       </button>
     </div>
   );

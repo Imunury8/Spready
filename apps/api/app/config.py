@@ -1,6 +1,11 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# config.py is at apps/api/app/config.py -> go 3 levels up to reach root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_env_path = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".env"))
 
 
 class Settings(BaseSettings):
@@ -10,7 +15,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/ai_diary"
 
     model_config = SettingsConfigDict(
-        env_file="../../.env",
+        env_file=root_env_path,
         env_file_encoding="utf-8",
         extra="ignore",
     )

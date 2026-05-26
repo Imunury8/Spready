@@ -13,7 +13,7 @@
 }
 
 .dark {
-  --background: #0f172a;
+  --background: radial-gradient(circle at 30% 20%, #1e1b4b 0%, #0f172a 75%);
   --foreground: #f8fafc;
   --muted: #94a3b8;
   --panel: #0f172a;
@@ -32,6 +32,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
 
 button,
@@ -51,4 +52,37 @@ a {
 button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
+}
+
+/* Custom Premium UI Animations */
+@keyframes fall {
+  0% {
+    transform: translateY(-20px) rotate(0deg) translateX(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(50vh) rotate(180deg) translateX(20px);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(105vh) rotate(360deg) translateX(-20px);
+    opacity: 0;
+  }
+}
+
+.animate-fall {
+  animation: fall linear forwards;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(99, 102, 241, 0.2), 0 0 1px rgba(99, 102, 241, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.7), 0 0 3px rgba(99, 102, 241, 0.4);
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
 }
