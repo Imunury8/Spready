@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -18,7 +18,9 @@ import {
   BookOpen,
   MessageSquare,
   Sun,
-  Moon
+  Moon,
+  UserCircle,
+  LogOut
 } from "lucide-react";
 
 import {
@@ -31,7 +33,6 @@ import {
   getUserPreference,
   updateUserPreference,
 } from "@/lib/api";
-import { ProfileCard } from "@/app/components/profile-card";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MAX_DIARY_LENGTH = 300;
@@ -213,26 +214,28 @@ function getMoodStyle(mood: string, isSelected: boolean, hasDiary: boolean): str
 
 function getMoodDotColor(mood: string): string {
   const norm = mood.trim();
-  if (norm.includes("기쁨") || norm.includes("행복") || norm.includes("좋음") || norm.includes("신남")) {
+  if (norm.includes("기쁨") || norm.includes("행복") || norm.includes("좋음") || norm.includes("신남") || norm.includes("뿌듯") || norm.includes("감사") || norm.includes("설렘")) {
     return "bg-amber-500";
   }
-  if (norm.includes("슬픔") || norm.includes("우울") || norm.includes("눈물") || norm.includes("외로움")) {
+  if (norm.includes("슬픔") || norm.includes("우울") || norm.includes("눈물") || norm.includes("외로움") || norm.includes("울적") || norm.includes("상심") || norm.includes("그리움")) {
     return "bg-blue-500 dark:bg-blue-400";
   }
-  if (norm.includes("차분") || norm.includes("평온") || norm.includes("휴식") || norm.includes("만족")) {
+  if (norm.includes("차분") || norm.includes("평온") || norm.includes("휴식") || norm.includes("만족") || norm.includes("안정") || norm.includes("편안") || norm.includes("충만")) {
     return "bg-emerald-500";
   }
-  if (norm.includes("피곤") || norm.includes("지침") || norm.includes("스트레스") || norm.includes("힘듦")) {
+  if (norm.includes("피곤") || norm.includes("지침") || norm.includes("스트레스") || norm.includes("힘듦") || norm.includes("피로") || norm.includes("번아웃") || norm.includes("녹초")) {
     return "bg-purple-500";
   }
-  if (norm.includes("불안") || norm.includes("걱정") || norm.includes("긴장") || norm.includes("두려움")) {
+  if (norm.includes("불안") || norm.includes("걱정") || norm.includes("긴장") || norm.includes("두려움") || norm.includes("초조") || norm.includes("불편") || norm.includes("위축")) {
     return "bg-rose-500";
   }
-  if (norm.includes("화남") || norm.includes("분노") || norm.includes("짜증")) {
+  if (norm.includes("화남") || norm.includes("분노") || norm.includes("짜증") || norm.includes("울화") || norm.includes("격분") || norm.includes("분개") || norm.includes("폭발")) {
     return "bg-orange-550 dark:bg-orange-500";
   }
   return "bg-slate-450 dark:bg-indigo-500";
 }
+
+let toastIdCounter = 0;
 
 export default function Home() {
   const { data: session, status: sessionStatus } = useSession();
@@ -263,6 +266,9 @@ export default function Home() {
   // AI diary style state
   const [selectedStyle, setSelectedStyle] = useState<"friend" | "coach" | "writer" | "fairytale">("friend");
 
+  // My Page slide-out state
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+
   // Premium UI toast & confetti states
   type ToastType = "success" | "error" | "info";
   interface Toast {
@@ -272,9 +278,20 @@ export default function Home() {
   }
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showConfetti, setShowConfetti] = useState(false);
+  interface ConfettiParticle {
+    id: number;
+    left: number;
+    delay: number;
+    duration: number;
+    size: number;
+    shape: string;
+    color: string;
+    opacity: number;
+  }
+  const [particles, setParticles] = useState<ConfettiParticle[]>([]);
 
   function showToast(message: string, type: ToastType = "info") {
-    const id = Math.random().toString(36).substring(2, 9);
+    const id = String(++toastIdCounter);
     setToasts((current) => [...current, { id, message, type }]);
     setTimeout(() => {
       setToasts((current) => current.filter((t) => t.id !== id));
@@ -282,8 +299,27 @@ export default function Home() {
   }
 
   function triggerConfetti() {
+    const shapes = ['rounded-full', 'rounded-sm', 'rotate-45'];
+    const colors = [
+      'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
+      'bg-amber-400', 'bg-emerald-400', 'bg-blue-400'
+    ];
+    const newParticles = Array.from({ length: 60 }).map((_, idx) => ({
+      id: idx,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.8,
+      duration: 2 + Math.random() * 2,
+      size: 6 + Math.random() * 8,
+      shape: shapes[Math.floor(Math.random() * shapes.length)] || 'rounded-full',
+      color: colors[Math.floor(Math.random() * colors.length)] || 'bg-indigo-500',
+      opacity: 0.8 + Math.random() * 0.2,
+    }));
+    setParticles(newParticles);
     setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 4500);
+    setTimeout(() => {
+      setShowConfetti(false);
+      setParticles([]);
+    }, 4500);
   }
 
   // Preference states
@@ -296,9 +332,12 @@ export default function Home() {
   const [error, setError] = useState("");
 
   const isLoggedIn = sessionStatus === "authenticated" && !!session;
+  const userEmail = session?.user?.email ?? "";
+  const gmailId = userEmail.includes("@") ? userEmail.split("@")[0] : userEmail;
 
   // Initialize Theme on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const savedTheme = (localStorage.getItem("theme") as "light" | "dark" | null) || "light";
     setTheme(savedTheme);
@@ -359,6 +398,7 @@ export default function Home() {
   const selectedDateKey = toDateKey(selectedDate);
   const selectedDiaries = diariesByDate[selectedDateKey] ?? [];
   const selectedDiary = selectedDiaries[0] ?? null;
+  const shouldStretch = isMemoExpanded || !selectedDiary;
   const monthDays = getMonthDays(visibleMonth);
 
   const monthLabel = new Intl.DateTimeFormat("ko-KR", {
@@ -563,26 +603,22 @@ export default function Home() {
       setDiaries((current) =>
         current.map((d) => (d.id === updated.id ? updated : d)),
       );
-      showToast("기존 기록이 수정되었으며, AI가 일기를 새롭게 융합 생성했습니다!", "success");
-      triggerConfetti();
+      showToast("일기가 성공적으로 업데이트 및 재생성되었습니다.", "success");
     } catch {
-      showToast("보낸 기록 수정과 AI 일기 재생성에 실패했습니다. 서버 상태를 확인해주세요.", "error");
+      showToast("일기를 업데이트하지 못했습니다. 서버 상태를 확인해주세요.", "error");
     } finally {
       setIsUpdatingMemo(false);
     }
   }
 
-  // Delete diary
   async function removeDiary(diary: SavedDiary) {
-    setDeletingDiaryId(diary.id);
-    setError("");
+    if (!confirm("정말 이 일기를 삭제하시겠습니까?")) return;
 
+    setDeletingDiaryId(diary.id);
     try {
       await deleteDiary(diary.id);
-      setDiaries((current) =>
-        current.filter((currentDiary) => currentDiary.id !== diary.id),
-      );
-      showToast("일기 기록이 성공적으로 삭제되었습니다.", "info");
+      setDiaries((current) => current.filter((d) => d.id !== diary.id));
+      showToast("일기가 성공적으로 삭제되었습니다.", "success");
     } catch {
       showToast("일기를 삭제하지 못했습니다. 서버 상태를 확인해주세요.", "error");
     } finally {
@@ -599,34 +635,20 @@ export default function Home() {
       {/* High-Performance Confetti Particle System */}
       {showConfetti && (
         <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
-          {Array.from({ length: 60 }).map((_, idx) => {
-            const left = Math.random() * 100;
-            const delay = Math.random() * 0.8;
-            const duration = 2 + Math.random() * 2;
-            const size = 6 + Math.random() * 8;
-            const shapes = ['rounded-full', 'rounded-sm', 'rotate-45'];
-            const shape = shapes[Math.floor(Math.random() * shapes.length)];
-            const colors = [
-              'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
-              'bg-amber-400', 'bg-emerald-400', 'bg-blue-400'
-            ];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            
-            return (
-              <div
-                key={idx}
-                className={`absolute top-0 animate-fall ${shape} ${color}`}
-                style={{
-                  left: `${left}%`,
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  animationDelay: `${delay}s`,
-                  animationDuration: `${duration}s`,
-                  opacity: 0.8 + Math.random() * 0.2,
-                }}
-              />
-            );
-          })}
+          {particles.map((p) => (
+            <div
+              key={p.id}
+              className={`absolute top-0 animate-fall ${p.shape} ${p.color}`}
+              style={{
+                left: `${p.left}%`,
+                width: `${p.size}px`,
+                height: `${p.size}px`,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
+                opacity: p.opacity,
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -663,213 +685,181 @@ export default function Home() {
         })}
       </div>
 
-      <div className="mx-auto grid min-h-[calc(100vh-32px)] max-w-7xl items-stretch gap-6 lg:min-h-[calc(100vh-48px)] lg:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)]">
-        
-        {/* Left Pane */}
-        <aside className="flex min-w-0 flex-col gap-5">
-          <div className="px-2">
-            <div className="mb-2 flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 shadow-lg shadow-indigo-500/5 p-1 transition-all duration-300">
-                <svg className="size-full text-indigo-600 dark:text-indigo-400" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Constellation book outline */}
-                  <path d="M22 32 L46 22 M46 22 L78 32 M78 32 L78 78 M78 78 L46 68 M46 68 L22 78 M22 78 L22 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" strokeDasharray="3.5 3.5" />
-                  <path d="M46 22 L46 68" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.6" strokeDasharray="3.5 3.5" />
-                  
-                  {/* Connected starry memories */}
-                  <path d="M22 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-                  <path d="M78 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
-                  
-                  {/* Star nodes */}
-                  <circle cx="22" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
-                  <circle cx="46" cy="22" r="6" className="fill-indigo-500 dark:fill-indigo-300" />
-                  <circle cx="78" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
-                  <circle cx="78" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
-                  <circle cx="46" cy="68" r="6.5" className="fill-indigo-600 dark:fill-indigo-400" />
-                  <circle cx="22" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
-                  
-                  {/* Glowing cosmic nodes */}
-                  <circle cx="34" cy="46" r="2.5" className="fill-indigo-450 dark:fill-indigo-200 animate-ping" />
-                  <circle cx="66" cy="50" r="2.5" className="fill-indigo-400 dark:fill-indigo-200" />
-                  <circle cx="50" cy="40" r="2" className="fill-indigo-500 dark:fill-indigo-300" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Spready</h1>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  흩어진 하루를 하나의 일기로
-                </p>
-              </div>
+      <div className="mx-auto max-w-7xl p-4 sm:p-6 font-sans">
+        {/* Unified Top Header */}
+        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 shadow-lg shadow-indigo-500/5 p-1 transition-all duration-300">
+              <svg className="size-full text-indigo-600 dark:text-indigo-400" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Constellation book outline */}
+                <path d="M22 32 L46 22 M46 22 L78 32 M78 32 L78 78 M78 78 L46 68 M46 68 L22 78 M22 78 L22 32" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" strokeDasharray="3.5 3.5" />
+                <path d="M46 22 L46 68" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.6" strokeDasharray="3.5 3.5" />
+                
+                {/* Connected starry memories */}
+                <path d="M22 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+                <path d="M78 32 L46 68" stroke="currentColor" strokeWidth="1.5" opacity="0.25" />
+                
+                {/* Star nodes */}
+                <circle cx="22" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
+                <circle cx="46" cy="22" r="6" className="fill-indigo-500 dark:fill-indigo-350" />
+                <circle cx="78" cy="32" r="5" className="fill-indigo-600 dark:fill-indigo-400 animate-pulse" />
+                <circle cx="78" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
+                <circle cx="46" cy="68" r="6.5" className="fill-indigo-600 dark:fill-indigo-400" />
+                <circle cx="22" cy="78" r="5.5" className="fill-indigo-550 dark:fill-indigo-350" />
+                
+                {/* Glowing cosmic nodes */}
+                <circle cx="34" cy="46" r="2.5" className="fill-indigo-450 dark:fill-indigo-200 animate-ping" />
+                <circle cx="66" cy="50" r="2.5" className="fill-indigo-400 dark:fill-indigo-200" />
+                <circle cx="50" cy="40" r="2" className="fill-indigo-500 dark:fill-indigo-300" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Spready</h1>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                흩어진 하루를 하나의 일기로
+              </p>
             </div>
           </div>
 
-          {/* Calendar Card */}
-          <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm dark:shadow-xl sm:p-6 transition-all">
-            <div className="mb-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => moveMonth(-1)}
-                aria-label="이전 달"
-                className="grid size-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-900 transition-all"
+          {/* Profile widget in Top-Right */}
+          <div className="flex items-center gap-3">
+            {sessionStatus === "loading" ? (
+              <div className="h-10 w-36 rounded-xl bg-slate-100 dark:bg-slate-900 animate-pulse border border-slate-200/40 dark:border-slate-800" />
+            ) : isLoggedIn ? (
+              <div
+                onClick={() => setIsMyPageOpen(true)}
+                className="flex items-center gap-2.5 bg-white/80 dark:bg-slate-950/80 border border-slate-200/80 dark:border-slate-850 px-3.5 py-1.5 rounded-2xl shadow-sm hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group"
               >
-                <ChevronLeft size={18} />
-              </button>
-              <h2 className="font-bold text-slate-800 dark:text-white tracking-tight">{monthLabel}</h2>
-              <button
-                type="button"
-                onClick={() => moveMonth(1)}
-                aria-label="다음 달"
-                className="grid size-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-900 transition-all"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            <div className="mb-3 grid grid-cols-7 text-center text-xs font-semibold text-slate-400 dark:text-slate-500">
-              {WEEKDAYS.map((weekday) => (
-                <div key={weekday}>{weekday}</div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-1">
-              {monthDays.map((date, index) => {
-                if (!date) {
-                  return <div key={`blank-${index}`} className="min-h-[68px]" />;
-                }
-
-                const key = toDateKey(date);
-                const dayDiaries = diariesByDate[key] ?? [];
-                const dayDiary = dayDiaries[0] ?? null;
-                const hasDiary = Boolean(dayDiaries.length);
-                const isSelected = key === selectedDateKey;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => selectDate(date)}
-                    aria-label={`${date.getDate()}일 ${
-                      hasDiary ? `저장된 일기 있음, 감정: ${dayDiary?.mood}` : "저장된 일기 없음"
-                    }`}
-                    className={[
-                      "relative min-h-[68px] py-1.5 px-0.5 rounded-2xl text-xs font-bold transition-all duration-200 flex flex-col items-center justify-between gap-1 select-none",
-                      getMoodStyle(dayDiary?.mood ?? "", isSelected, hasDiary)
-                    ].join(" ")}
-                  >
-                    <span className="text-xs font-semibold leading-none">{date.getDate()}</span>
-                    {hasDiary && dayDiary ? (
-                      <div className="flex flex-col gap-0.5 w-full items-center mt-auto">
-                        <span
-                          className={[
-                            "size-1 rounded-full mb-1",
-                            isSelected ? "bg-white" : getMoodDotColor(dayDiary.mood),
-                          ].join(" ")}
-                        />
-                        <div className="flex flex-col gap-0.5 w-full px-0.5">
-                          {dayDiary.keywords.slice(0, 2).map((keyword) => (
-                            <span
-                              key={keyword}
-                              className={[
-                                "text-[8px] font-medium leading-none px-1 py-0.5 rounded-md truncate max-w-full text-center tracking-tight",
-                                isSelected
-                                  ? "bg-white/20 text-white"
-                                  : "bg-black/[0.04] dark:bg-white/[0.08]"
-                              ].join(" ")}
-                            >
-                              #{keyword}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-0.5 w-full items-center mt-auto opacity-0 pointer-events-none">
-                        <span className="size-1 rounded-full mb-1 bg-transparent" />
-                        <div className="flex flex-col gap-0.5 w-full px-0.5">
-                          <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
-                          <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
-                        </div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Profile & Setting Card */}
-          <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm dark:shadow-xl sm:p-6 flex-1 flex flex-col justify-between gap-5 transition-all">
-            <div>
-              <ProfileCard />
-
-              {/* Reminder Dropdown */}
-              <div className="mb-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 p-4 border border-slate-100 dark:border-slate-800/40">
-                <p className="mb-2.5 text-xs font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">일기 생성 시간</p>
-                <div className="relative">
-                  <button
-                    type="button"
-                    disabled={!isLoggedIn}
-                    onClick={() => setGenerationOpen((current) => !current)}
-                    className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:border-slate-350 dark:hover:border-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="생성 시간 선택"
-                  >
-                    <span>{generationTime}</span>
-                    <Clock size={16} className="text-slate-400" />
-                  </button>
-
-                  {generationOpen && (
-                    <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-100">
-                      {["21:00", "22:00", "23:00", "00:00"].map((time) => (
-                        <button
-                          key={time}
-                          type="button"
-                          onClick={() => handlePreferenceChange(time)}
-                          className={[
-                            "flex h-10 w-full items-center px-4 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-900 transition",
-                            generationTime === time
-                              ? "font-bold text-slate-900 dark:text-indigo-400 bg-slate-100/50 dark:bg-indigo-950/20"
-                              : "text-slate-500 dark:text-slate-400",
-                          ].join(" ")}
-                        >
-                          {time}
-                        </button>
-                      ))}
-                    </div>
+                <div className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500">
+                  {session.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt=""
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <UserCircle size={16} className="text-indigo-500" />
                   )}
                 </div>
+                <span className="text-xs font-bold text-slate-750 dark:text-slate-200 group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition tracking-tight">
+                  {gmailId}
+                </span>
               </div>
-            </div>
-
-            {/* Usage limit bar */}
-            {isLoggedIn && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-slate-900/60 p-4 border border-slate-100 dark:border-slate-800/40">
-                <div className="mb-2.5 flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">사용량 한도</p>
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                    {diaries.length} / {TOTAL_LIMIT}
-                  </span>
-                </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-950 border border-slate-300/40 dark:border-slate-850">
-                  <div
-                    className={[
-                      "h-full rounded-full transition-all duration-500 pulse-glow",
-                      isLimitExceeded ? "bg-red-500 shadow-md shadow-red-500/20" : "bg-indigo-500 shadow-md shadow-indigo-500/20"
-                    ].join(" ")}
-                    style={{ width: `${Math.min((diaries.length / TOTAL_LIMIT) * 100, 100)}%` }}
-                  />
-                </div>
-
-                {isLimitExceeded && (
-                  <div className="mt-3 flex items-start gap-2 text-red-650 dark:text-red-400 bg-red-50 dark:bg-red-950/10 border border-red-100 dark:border-red-950/30 rounded-xl p-2.5 text-xs animate-in fade-in duration-200">
-                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                    <span>사용 한도를 초과했습니다. 새로운 일기 작성이 제한됩니다.</span>
-                  </div>
-                )}
-              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => signIn("google")}
+                className="flex h-10 items-center justify-center gap-2 rounded-2xl bg-slate-900 dark:bg-indigo-650 px-4 text-xs font-bold text-white shadow-sm hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all active:scale-[0.98]"
+              >
+                <svg className="h-3.5 w-3.5 fill-current mr-0.5" viewBox="0 0 24 24">
+                  <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.41 0-6.19-2.78-6.19-6.19s2.78-6.19 6.19-6.19c1.7 0 3.25.69 4.39 1.8l3.23-3.23C19.71 2.91 16.2 1.5 12.24 1.5 6.033 1.5 1 6.533 1 12.74s5.033 11.24 11.24 11.24c6.48 0 10.74-4.54 10.74-10.9 0-.67-.06-1.34-.18-1.795H12.24z" />
+                </svg>
+                Google로 로그인
+              </button>
             )}
-          </section>
-        </aside>
+          </div>
+        </header>
 
+        {/* 2-Column Dashboard Grid */}
+        <div className={`grid min-h-[calc(100vh-140px)] gap-6 lg:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)] ${shouldStretch ? "items-stretch" : "items-start"}`}>
+          {/* Left Pane */}
+          <aside className={`flex min-w-0 flex-col gap-5 ${shouldStretch ? "h-full" : "h-fit"}`}>
+            {/* Calendar Card */}
+            <section className={`rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 shadow-sm dark:shadow-xl sm:p-6 transition-all ${shouldStretch ? "h-full flex flex-col justify-between" : "h-fit flex flex-col"}`}>
+              <div className="mb-5 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => moveMonth(-1)}
+                  aria-label="이전 달"
+                  className="grid size-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-900 transition-all"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <h2 className="font-bold text-slate-800 dark:text-white tracking-tight">{monthLabel}</h2>
+                <button
+                  type="button"
+                  onClick={() => moveMonth(1)}
+                  aria-label="다음 달"
+                  className="grid size-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-900 transition-all"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+
+              <div className="mb-3 grid grid-cols-7 text-center text-xs font-semibold text-slate-400 dark:text-slate-500">
+                {WEEKDAYS.map((weekday) => (
+                  <div key={weekday}>{weekday}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {monthDays.map((date, index) => {
+                  if (!date) {
+                    return <div key={`blank-${index}`} className="min-h-[68px]" />;
+                  }
+
+                  const key = toDateKey(date);
+                  const dayDiaries = diariesByDate[key] ?? [];
+                  const dayDiary = dayDiaries[0] ?? null;
+                  const hasDiary = Boolean(dayDiaries.length);
+                  const isSelected = key === selectedDateKey;
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectDate(date)}
+                      aria-label={`${date.getDate()}일 ${
+                        hasDiary ? `저장된 일기 있음, 감정: ${dayDiary?.mood}` : "저장된 일기 없음"
+                      }`}
+                      className={[
+                        "relative min-h-[68px] py-1.5 px-0.5 rounded-2xl text-xs font-bold transition-all duration-200 flex flex-col items-center justify-between gap-1 select-none",
+                        getMoodStyle(dayDiary?.mood ?? "", isSelected, hasDiary)
+                      ].join(" ")}
+                    >
+                      <span className="text-xs font-semibold leading-none">{date.getDate()}</span>
+                      {hasDiary && dayDiary ? (
+                        <div className="flex flex-col gap-0.5 w-full items-center mt-auto">
+                          <span
+                            className={[
+                              "size-1 rounded-full mb-1",
+                              isSelected ? "bg-white" : getMoodDotColor(dayDiary.mood),
+                            ].join(" ")}
+                          />
+                          <div className="flex flex-col gap-0.5 w-full px-0.5">
+                            {dayDiary.keywords.slice(0, 2).map((keyword) => (
+                              <span
+                                key={keyword}
+                                className={[
+                                  "text-[8px] font-medium leading-none px-1 py-0.5 rounded-md truncate max-w-full text-center tracking-tight",
+                                  isSelected
+                                    ? "bg-white/20 text-white"
+                                    : "bg-black/[0.04] dark:bg-white/[0.08]"
+                                ].join(" ")}
+                              >
+                                #{keyword}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-0.5 w-full items-center mt-auto opacity-0 pointer-events-none">
+                          <span className="size-1 rounded-full mb-1 bg-transparent" />
+                          <div className="flex flex-col gap-0.5 w-full px-0.5">
+                            <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
+                            <span className="text-[8px] leading-none px-1 py-0.5">#spacer</span>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </aside>
+ 
         {/* Right Pane */}
-        <main className="grid min-w-0 auto-rows-max gap-5 lg:pt-[58px]">
+        <main className="flex min-w-0 flex-col gap-5 h-full">
           
           {error && (
             <div className="rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 p-4 text-sm text-red-700 dark:text-red-300 flex items-start gap-2.5 shadow-sm">
@@ -880,7 +870,7 @@ export default function Home() {
 
           {/* Today's Memo (Expanded / Input State) */}
           {isMemoExpanded ? (
-            <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all">
+            <section className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all h-full flex flex-col justify-between">
               <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                 <div>
                   <div className="flex items-center gap-2">
@@ -947,7 +937,7 @@ export default function Home() {
               </div>
 
               {/* Text Area Card */}
-              <div className="flex h-[420px] flex-col rounded-3xl border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/40 p-5 transition-all">
+              <div className="flex flex-1 flex-col rounded-3xl border border-slate-200 dark:border-slate-800/80 bg-slate-50 dark:bg-slate-900/40 p-5 transition-all">
                 <textarea
                   value={memoContent}
                   onChange={(event) => setMemoContent(event.target.value)}
@@ -971,8 +961,8 @@ export default function Home() {
             
             // Saved Diary logic
             <div className="space-y-5">
-              {selectedDiary ? (
-                <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all">
+                                          {selectedDiary ? (
+                <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all h-auto flex flex-col">
                   <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
                     <div>
                       <p className="text-xs font-bold text-slate-400 dark:text-slate-500 tracking-tight">
@@ -1156,11 +1146,11 @@ export default function Home() {
                     </div>
                   )}
                 </section>
-              ) : (
+) : (
                 
-                // If there's no diary
-                <section className="rounded-3xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all">
-                  <div className="flex min-h-[380px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 p-6 text-center">
+                                // If there's no diary
+                <section className="rounded-3xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950 p-6 shadow-sm dark:shadow-xl sm:p-7 transition-all h-full flex flex-col">
+                  <div className="flex h-full flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 p-6 text-center">
                     <CalendarDays className="mb-4 text-slate-300 dark:text-slate-700" size={38} />
                     <p className="mb-1 text-sm font-bold text-slate-800 dark:text-slate-350">
                       작성된 일기가 없습니다
@@ -1195,6 +1185,174 @@ export default function Home() {
       >
         {!mounted || theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
       </button>
+
+      {/* Premium My Page Drawer */}
+      {/* Backdrop Mask with dynamic fade-in and blur */}
+      <div
+        onClick={() => setIsMyPageOpen(false)}
+        className={`fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm transition-opacity duration-500 ease-in-out ${isMyPageOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+      />
+
+      {/* Slide-out Drawer Panel */}
+      <div className={`fixed inset-y-0 right-0 z-[120] w-full sm:max-w-md bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border-l border-slate-200/50 dark:border-slate-800/50 shadow-2xl p-6 overflow-hidden flex flex-col justify-between transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] transform ${isMyPageOpen ? "translate-x-0" : "translate-x-full"}`}>
+        <div>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-4 mb-6">
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <UserCircle className="text-indigo-600 dark:text-indigo-400" size={24} />
+              마이페이지
+            </h2>
+            <button
+              type="button"
+              onClick={() => setIsMyPageOpen(false)}
+              className="grid size-9 place-items-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all active:scale-90"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Contents scrollable */}
+          <div className="space-y-6">
+            {/* 1. 가입한 이메일 조회 */}
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/40 p-4 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">가입 정보</p>
+              <div className="flex items-center gap-3">
+                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200/80 dark:border-slate-850 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500">
+                  {session?.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt=""
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <UserCircle size={24} className="text-indigo-500" />
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
+                    {session?.user?.name ?? "사용자"}
+                  </h4>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                    {userEmail}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. 일기 생성 시간 라디오 버튼 */}
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/40 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">일기 생성 시간</p>
+                <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md">자동 분석 및 생성</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {["21:00", "22:00", "23:00", "00:00"].map((time) => {
+                  const isSelected = generationTime === time;
+                  return (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={() => handlePreferenceChange(time)}
+                      className={[
+                        "flex flex-col items-center justify-center py-2.5 rounded-xl border text-xs font-bold transition-all duration-200 cursor-pointer",
+                        isSelected
+                          ? "bg-slate-900 border-slate-900 text-white dark:bg-indigo-600 dark:border-indigo-600 dark:text-black shadow-md shadow-indigo-500/10"
+                          : "bg-white border-slate-200 text-slate-650 dark:bg-slate-955 dark:border-slate-800 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                      ].join(" ")}
+                    >
+                      <Clock size={14} className={isSelected ? "text-indigo-300 dark:text-black mb-1" : "text-slate-400 dark:text-slate-500 mb-1"} />
+                      <span>{time}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. 감정 색상 관리 */}
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/40 p-4 shadow-sm">
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">감정 달력 색상 관리</p>
+              
+              {/* Miniature Grid representing the 6 emotions */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { name: "기쁨 / 행복", emoji: "☀️", colorClass: "bg-amber-500", label: "기쁨", textClass: "text-amber-800 dark:text-amber-300", bgClass: "bg-amber-50/70 dark:bg-amber-950/20", borderClass: "border-amber-200/50 dark:border-amber-900/30" },
+                  { name: "슬픔 / 우울", emoji: "🌊", colorClass: "bg-blue-500 dark:bg-blue-400", label: "슬픔", textClass: "text-blue-800 dark:text-blue-300", bgClass: "bg-blue-50/70 dark:bg-blue-950/20", borderClass: "border-blue-200/50 dark:border-blue-900/30" },
+                  { name: "차분 / 평온", emoji: "🌱", colorClass: "bg-emerald-500", label: "평온", textClass: "text-emerald-800 dark:text-emerald-300", bgClass: "bg-emerald-50/70 dark:bg-emerald-950/20", borderClass: "border-emerald-200/50 dark:border-emerald-900/30" },
+                  { name: "피곤 / 지침", emoji: "🔋", colorClass: "bg-purple-500", label: "지침", textClass: "text-purple-800 dark:text-purple-300", bgClass: "bg-purple-50/70 dark:bg-purple-950/20", borderClass: "border-purple-200/50 dark:border-purple-900/30" },
+                  { name: "불안 / 걱정", emoji: "🌪️", colorClass: "bg-rose-500", label: "불안", textClass: "text-rose-800 dark:text-rose-300", bgClass: "bg-rose-50/70 dark:bg-rose-950/20", borderClass: "border-rose-200/50 dark:border-rose-900/30" },
+                  { name: "화남 / 짜증", emoji: "🔥", colorClass: "bg-orange-550 dark:bg-orange-500", label: "짜증", textClass: "text-orange-800 dark:text-orange-300", bgClass: "bg-orange-50/70 dark:bg-orange-950/20", borderClass: "border-orange-200/50 dark:border-orange-900/30" },
+                ].map((mood) => (
+                  <div
+                    key={mood.name}
+                    className="flex items-center gap-2 rounded-xl bg-white dark:bg-slate-950 p-2 border border-slate-200/40 dark:border-slate-800/40 relative group"
+                  >
+                    {/* Miniature mockup calendar cell preview */}
+                    <div
+                      className={[
+                        "size-10 rounded-xl border flex flex-col items-center justify-between p-1 select-none pointer-events-none scale-90",
+                        mood.bgClass,
+                        mood.borderClass,
+                        mood.textClass
+                      ].join(" ")}
+                    >
+                      <span className="text-[9px] font-bold leading-none">27</span>
+                      <span className={["size-1 rounded-full mb-0.5", mood.colorClass].join(" ")} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 leading-tight">
+                        {mood.emoji} {mood.label}
+                      </p>
+                      <p className="text-[9px] text-slate-400 dark:text-slate-500 font-semibold truncate">
+                        {mood.name.split(" / ")[1] || mood.name}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 4. 사용량 한도 */}
+            {isLoggedIn && (
+              <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/40 p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">사용량 한도</p>
+                  <span className="text-[10px] font-bold text-slate-650 dark:text-slate-350">
+                    {diaries.length} / {TOTAL_LIMIT}
+                  </span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-950 border border-slate-300/40 dark:border-slate-850">
+                  <div
+                    className={[
+                      "h-full rounded-full transition-all duration-500 pulse-glow",
+                      isLimitExceeded ? "bg-red-500 shadow-md shadow-red-500/20" : "bg-indigo-500 shadow-md shadow-indigo-500/20"
+                    ].join(" ")}
+                    style={{ width: `${Math.min((diaries.length / TOTAL_LIMIT) * 100, 100)}%` }}
+                  />
+                </div>
+                {isLimitExceeded && (
+                  <div className="mt-3 flex items-start gap-2 text-red-650 dark:text-red-400 bg-red-50 dark:bg-red-950/10 border border-red-100 dark:border-red-950/30 rounded-xl p-2 text-[10px] animate-in fade-in duration-200">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    <span>사용 한도를 초과했습니다. 새로운 일기 작성이 제한됩니다.</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Logout footer */}
+        <div className="border-t border-slate-200/60 dark:border-slate-800/60 pt-4 mt-6">
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="flex w-full h-11 items-center justify-center gap-2 rounded-2xl bg-red-50 dark:bg-red-950/15 border border-red-200/60 dark:border-red-900/20 text-red-650 dark:text-red-400 font-bold text-sm hover:bg-red-100 dark:hover:bg-red-950/30 transition active:scale-[0.98] shadow-sm shadow-red-500/5"
+          >
+            <LogOut size={16} />
+            로그아웃
+          </button>
+        </div>
+      </div>
     </div>
-  );
+  </div>
+);
 }
